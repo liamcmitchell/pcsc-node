@@ -9,73 +9,56 @@ Make sure you have built the library first:
 ```bash
 cd ..
 npm install
-npm run build
-```
-
-## Running Examples
-
-Examples are TypeScript files that get compiled to `dist/examples/`. Run them from the project root:
-
-```bash
-# From project root
-node dist/examples/list-readers.js
-```
-
-Or from the dist/examples directory:
-
-```bash
-cd dist/examples
-node list-readers.js
 ```
 
 ## Examples
 
 ### Basic Examples
 
-#### list-readers.ts
+#### list-readers.js
 
 List all available PC/SC readers and their status.
 
 ```bash
-node dist/examples/list-readers.js
+node examples/list-readers.js
 ```
 
-#### read-card.ts
+#### read-card.js
 
 Connect to a card and read its UID and ATR.
 
 ```bash
-node dist/examples/read-card.js          # Use first reader
-node dist/examples/read-card.js 1        # Use second reader
+node examples/read-card.js          # Use first reader
+node examples/read-card.js 1        # Use second reader
 ```
 
-#### monitor-cards.ts
+#### monitor-cards.js
 
 Monitor for card insert/remove events using the high-level Devices API.
 
 ```bash
-node dist/examples/monitor-cards.js
+node examples/monitor-cards.js
 # Press Ctrl+C to stop
 ```
 
-#### send-apdu.ts
+#### send-apdu.js
 
 Send a custom APDU command to a card.
 
 ```bash
-node dist/examples/send-apdu.js "FF CA 00 00 00"      # Get UID (contactless)
-node dist/examples/send-apdu.js "00 A4 04 00"         # Select command
-node dist/examples/send-apdu.js "00 B0 00 00 10"      # Read 16 bytes
+node examples/send-apdu.js "FF CA 00 00 00"      # Get UID (contactless)
+node examples/send-apdu.js "00 A4 04 00"         # Select command
+node examples/send-apdu.js "00 B0 00 00 10"      # Read 16 bytes
 ```
 
 ### Advanced Examples
 
-#### error-handling.ts
+#### error-handling.js
 
 Demonstrates proper error handling with specific PC/SC error types.
 
 ```bash
-node dist/examples/error-handling.js
+node examples/error-handling.js
 ```
 
 Shows how to catch and handle:
@@ -86,23 +69,23 @@ Shows how to catch and handle:
 - `ServiceNotRunningError` - PC/SC daemon not running
 - `SharingViolationError` - Card in use by another app
 
-#### wait-for-card.ts
+#### wait-for-card.js
 
 Wait for a card using the low-level `Context.waitForChange()` API.
 
 ```bash
-node dist/examples/wait-for-card.js        # Wait indefinitely
-node dist/examples/wait-for-card.js 30     # Wait up to 30 seconds
+node examples/wait-for-card.js        # Wait indefinitely
+node examples/wait-for-card.js 30     # Wait up to 30 seconds
 ```
 
 This demonstrates the polling-based approach as an alternative to the event-driven `Devices` API.
 
-#### control-command.ts
+#### control-command.js
 
 Send control commands to readers for advanced features.
 
 ```bash
-node dist/examples/control-command.js
+node examples/control-command.js
 ```
 
 Demonstrates:
@@ -112,12 +95,12 @@ Demonstrates:
 - Using `parseFeatures()` to decode TLV responses
 - Platform-specific codes with `SCARD_CTL_CODE()`
 
-#### reconnect.ts
+#### reconnect.js
 
 Reset or change protocols on a connected card.
 
 ```bash
-node dist/examples/reconnect.js
+node examples/reconnect.js
 ```
 
 Demonstrates:
@@ -127,15 +110,15 @@ Demonstrates:
 - Upgrading to exclusive access
 - Warm reset vs cold reset (unpower)
 
-#### mifare-read-write.ts
+#### mifare-read-write.js
 
 Read and write MIFARE Classic cards (1K/4K).
 
 ```bash
-node dist/examples/mifare-read-write.js read            # Read block 4
-node dist/examples/mifare-read-write.js read 8          # Read block 8
-node dist/examples/mifare-read-write.js write 4 "00112233445566778899AABBCCDDEEFF"
-node dist/examples/mifare-read-write.js dump            # Dump all readable blocks
+node examples/mifare-read-write.js read            # Read block 4
+node examples/mifare-read-write.js read 8          # Read block 8
+node examples/mifare-read-write.js write 4 "00112233445566778899AABBCCDDEEFF"
+node examples/mifare-read-write.js dump            # Dump all readable blocks
 ```
 
 **Warning**: Be careful when writing! Writing to sector trailers (blocks 3, 7, 11, ...) can permanently lock sectors.

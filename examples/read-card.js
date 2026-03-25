@@ -1,12 +1,12 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Connect to a card and read its UID and ATR
  *
- * Usage: npx ts-node read-card.ts [reader-index]
+ * Usage: node read-card.js [reader-index]
  *
  * Examples:
- *   npx ts-node read-card.ts      # Use first reader
- *   npx ts-node read-card.ts 1    # Use second reader
+ *   node read-card.js      # Use first reader
+ *   node read-card.js 1    # Use second reader
  */
 
 import {
@@ -16,9 +16,9 @@ import {
   SCARD_PROTOCOL_T1,
   SCARD_LEAVE_CARD,
   SCARD_STATE_PRESENT,
-} from "../lib";
+} from "../lib/index.js";
 
-async function main(): Promise<void> {
+async function main() {
   const readerIndex = parseInt(process.argv[2]) || 0;
 
   console.log("Creating PC/SC context...");
@@ -78,14 +78,14 @@ async function main(): Promise<void> {
         }
       }
     } catch (err) {
-      console.log(`  Could not read UID: ${(err as Error).message}`);
+      console.log(`  Could not read UID: ${err.message}`);
     }
 
     // Disconnect
     card.disconnect(SCARD_LEAVE_CARD);
     console.log("\nDisconnected.");
   } catch (err) {
-    console.error("Error:", (err as Error).message);
+    console.error("Error:", err.message);
   } finally {
     ctx.close();
   }

@@ -1,8 +1,8 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Send control commands to a reader
  *
- * Usage: npx ts-node control-command.ts
+ * Usage: node control-command.js
  *
  * This example demonstrates:
  * - Using card.control() to send control commands
@@ -31,11 +31,10 @@ import {
   FEATURE_VERIFY_PIN_DIRECT,
   FEATURE_MODIFY_PIN_DIRECT,
   parseFeatures,
-} from "../lib";
-import type { Card } from "../lib/types";
+} from "../lib/index.js";
 
 // Feature tag names for display
-const FEATURE_NAMES: Record<number, string> = {
+const FEATURE_NAMES = {
   0x01: "VERIFY_PIN_START",
   0x02: "VERIFY_PIN_FINISH",
   0x03: "MODIFY_PIN_START",
@@ -57,7 +56,7 @@ const FEATURE_NAMES: Record<number, string> = {
   0x13: "CCID_ESC_COMMAND",
 };
 
-async function main(): Promise<void> {
+async function main() {
   console.log("Control Command Example");
   console.log("=======================\n");
 
@@ -77,7 +76,7 @@ async function main(): Promise<void> {
 
     // For control commands, we can connect with SCARD_SHARE_DIRECT
     // which doesn't require a card to be present
-    let card: Card;
+    let card;
     const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
 
     if (hasCard) {
@@ -130,7 +129,7 @@ async function main(): Promise<void> {
         }
       }
     } catch (err) {
-      console.log(`Feature query failed: ${(err as Error).message}`);
+      console.log(`Feature query failed: ${err.message}`);
       console.log("(This is normal for many consumer readers)");
     }
 
@@ -167,7 +166,7 @@ async function main(): Promise<void> {
     card.disconnect(SCARD_LEAVE_CARD);
     console.log("\nDone!");
   } catch (err) {
-    console.error(`Error: ${(err as Error).message}`);
+    console.error(`Error: ${err.message}`);
   } finally {
     ctx.close();
   }

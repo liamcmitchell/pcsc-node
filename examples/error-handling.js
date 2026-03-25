@@ -1,8 +1,8 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Demonstrates error handling with specific error types
  *
- * Usage: npx ts-node error-handling.ts
+ * Usage: node error-handling.js
  *
  * This example shows how to catch and handle different PC/SC error types.
  */
@@ -19,16 +19,15 @@ import {
   SCARD_SHARE_EXCLUSIVE,
   SCARD_PROTOCOL_T0,
   SCARD_PROTOCOL_T1,
-} from "../lib";
-import type { Card, ReaderEventInfo } from "../lib/types";
+} from "../lib/index.js";
 
 /**
  * Example 1: Handling errors with the low-level Context API
  */
-async function lowLevelExample(): Promise<void> {
+async function lowLevelExample() {
   console.log("=== Low-Level Error Handling ===\n");
 
-  let ctx: InstanceType<typeof Context> | undefined;
+  let ctx;
   try {
     ctx = new Context();
   } catch (err) {
@@ -78,7 +77,7 @@ async function lowLevelExample(): Promise<void> {
       console.log(`Error code: 0x${err.code.toString(16)}`);
     } else {
       // Non-PC/SC error
-      console.log(`Unexpected error: ${(err as Error).message}`);
+      console.log(`Unexpected error: ${err.message}`);
     }
   } finally {
     if (ctx) {
@@ -90,12 +89,12 @@ async function lowLevelExample(): Promise<void> {
 /**
  * Example 2: Handling errors with the high-level Devices API
  */
-export function highLevelExample(): void {
+export function highLevelExample() {
   console.log("\n=== High-Level Error Handling ===\n");
 
   const devices = new Devices();
 
-  devices.on("card-inserted", async ({ reader, card }: { reader: ReaderEventInfo; card: Card }) => {
+  devices.on("card-inserted", async ({ reader, card }) => {
     console.log(`Card inserted in ${reader.name}`);
 
     try {
@@ -112,12 +111,12 @@ export function highLevelExample(): void {
       } else if (err instanceof PCSCError) {
         console.log(`Card error: ${err.message} (code: 0x${err.code.toString(16)})`);
       } else {
-        console.log(`Error: ${(err as Error).message}`);
+        console.log(`Error: ${err.message}`);
       }
     }
   });
 
-  devices.on("error", (err: Error) => {
+  devices.on("error", (err) => {
     // The Devices class emits errors that occur during monitoring
     if (err instanceof ServiceNotRunningError) {
       console.log("PC/SC service stopped.");
@@ -130,7 +129,7 @@ export function highLevelExample(): void {
     }
   });
 
-  devices.on("reader-attached", (reader: ReaderEventInfo) => {
+  devices.on("reader-attached", (reader) => {
     console.log(`Reader attached: ${reader.name}`);
   });
 
@@ -152,7 +151,7 @@ export function highLevelExample(): void {
 /**
  * Example 3: Using try/catch with specific error recovery
  */
-async function errorRecoveryExample(): Promise<void> {
+async function errorRecoveryExample() {
   console.log("\n=== Error Recovery Example ===\n");
 
   const ctx = new Context();
@@ -165,7 +164,7 @@ async function errorRecoveryExample(): Promise<void> {
     }
 
     const reader = readers[0];
-    let card: Card | undefined;
+    let card;
 
     // Retry logic for transient errors
     const maxRetries = 3;
@@ -196,7 +195,7 @@ async function errorRecoveryExample(): Promise<void> {
 }
 
 // Run the examples
-async function main(): Promise<void> {
+async function main() {
   await lowLevelExample();
   await errorRecoveryExample();
 

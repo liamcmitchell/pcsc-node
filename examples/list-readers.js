@@ -1,13 +1,13 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * List all available PC/SC readers
  *
- * Usage: npx ts-node list-readers.ts
+ * Usage: node list-readers.js
  */
 
-import { Context, SCARD_STATE_PRESENT } from "../lib";
+import { Context, SCARD_STATE_PRESENT } from "../lib/index.js";
 
-function main(): void {
+function main() {
   console.log("Creating PC/SC context...");
   const ctx = new Context();
 
@@ -41,7 +41,7 @@ function main(): void {
       }
     }
   } catch (err) {
-    console.error("Error:", (err as Error).message);
+    console.error("Error:", err.message);
   } finally {
     ctx.close();
   }

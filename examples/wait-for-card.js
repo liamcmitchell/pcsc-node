@@ -1,12 +1,12 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Wait for a card using the low-level waitForChange API
  *
- * Usage: npx ts-node wait-for-card.ts [timeout-seconds]
+ * Usage: node wait-for-card.js [timeout-seconds]
  *
  * Examples:
- *   npx ts-node wait-for-card.ts        # Wait indefinitely
- *   npx ts-node wait-for-card.ts 30     # Wait up to 30 seconds
+ *   node wait-for-card.js        # Wait indefinitely
+ *   node wait-for-card.js 30     # Wait up to 30 seconds
  *
  * This demonstrates the polling-based approach using Context.waitForChange()
  * as an alternative to the event-driven Devices API.
@@ -19,13 +19,12 @@ import {
   SCARD_PROTOCOL_T0,
   SCARD_PROTOCOL_T1,
   SCARD_LEAVE_CARD,
-} from "../lib";
-import type { Reader } from "../lib/types";
+} from "../lib/index.js";
 
 // Store context reference for cleanup on SIGINT
-let globalCtx: InstanceType<typeof Context> | undefined;
+let globalCtx;
 
-async function main(): Promise<void> {
+async function main() {
   const timeoutSeconds = parseInt(process.argv[2]) || 0;
   const timeout = timeoutSeconds > 0 ? timeoutSeconds * 1000 : 0; // 0 = infinite
 
@@ -69,9 +68,7 @@ async function main(): Promise<void> {
     console.log();
 
     // Check if any reader already has a card
-    let readerWithCard: Reader | undefined = readers.find(
-      (r) => (r.state & SCARD_STATE_PRESENT) !== 0,
-    );
+    let readerWithCard = readers.find((r) => (r.state & SCARD_STATE_PRESENT) !== 0);
 
     if (readerWithCard) {
       console.log(`Card already present in: ${readerWithCard.name}`);
@@ -146,7 +143,7 @@ async function main(): Promise<void> {
     card.disconnect(SCARD_LEAVE_CARD);
     console.log("\nDone!");
   } catch (err) {
-    console.error(`Error: ${(err as Error).message}`);
+    console.error(`Error: ${err.message}`);
   } finally {
     ctx.close();
   }

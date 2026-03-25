@@ -1,17 +1,17 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Read and write MIFARE Classic cards
  *
  * Usage:
- *   npx ts-node mifare-read-write.ts read [block]       # Read a block (default: 4)
- *   npx ts-node mifare-read-write.ts write [block] <hex-data>  # Write to a block
- *   npx ts-node mifare-read-write.ts dump               # Dump readable blocks
+ *   node mifare-read-write.js read [block]       # Read a block (default: 4)
+ *   node mifare-read-write.js write [block] <hex-data>  # Write to a block
+ *   node mifare-read-write.js dump               # Dump readable blocks
  *
  * Examples:
- *   npx ts-node mifare-read-write.ts read               # Read block 4
- *   npx ts-node mifare-read-write.ts read 8             # Read block 8
- *   npx ts-node mifare-read-write.ts write 4 "00112233445566778899AABBCCDDEEFF"
- *   npx ts-node mifare-read-write.ts dump               # Dump all readable blocks
+ *   node mifare-read-write.js read               # Read block 4
+ *   node mifare-read-write.js read 8             # Read block 8
+ *   node mifare-read-write.js write 4 "00112233445566778899AABBCCDDEEFF"
+ *   node mifare-read-write.js dump               # Dump all readable blocks
  *
  * MIFARE Classic Memory Layout:
  * - 1K: 16 sectors x 4 blocks = 64 blocks (blocks 0-63)
@@ -30,8 +30,7 @@ import {
   SCARD_PROTOCOL_T1,
   SCARD_LEAVE_CARD,
   SCARD_STATE_PRESENT,
-} from "../lib";
-import type { Card } from "../lib/types";
+} from "../lib/index.js";
 
 // MIFARE default keys
 const KEY_A_DEFAULT = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
@@ -42,7 +41,7 @@ const KEY_TYPE_A = 0x60;
 /**
  * Load authentication key into the reader's key slot
  */
-async function loadKey(card: Card, keySlot: number, key: number[]): Promise<void> {
+async function loadKey(card, keySlot, key) {
   // FF 82 00 <slot> 06 <key bytes>
   const cmd = [0xff, 0x82, 0x00, keySlot, 0x06, ...key];
   const response = await card.transmit(cmd);
@@ -56,12 +55,7 @@ async function loadKey(card: Card, keySlot: number, key: number[]): Promise<void
 /**
  * Authenticate to a block using a loaded key
  */
-async function authenticate(
-  card: Card,
-  block: number,
-  keyType: number,
-  keySlot: number,
-): Promise<void> {
+async function authenticate(card, block, keyType, keySlot) {
   // FF 86 00 00 05 01 00 <block> <key type> <key slot>
   const cmd = [0xff, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, block, keyType, keySlot];
   const response = await card.transmit(cmd);
@@ -75,7 +69,7 @@ async function authenticate(
 /**
  * Read a block (16 bytes)
  */
-async function readBlock(card: Card, block: number): Promise<Buffer> {
+async function readBlock(card, block) {
   // FF B0 00 <block> 10
   const cmd = [0xff, 0xb0, 0x00, block, 0x10];
   const response = await card.transmit(cmd);
@@ -91,7 +85,7 @@ async function readBlock(card: Card, block: number): Promise<Buffer> {
 /**
  * Write a block (16 bytes)
  */
-async function writeBlock(card: Card, block: number, data: number[]): Promise<void> {
+async function writeBlock(card, block, data) {
   if (data.length !== 16) {
     throw new Error("Data must be exactly 16 bytes");
   }
@@ -109,7 +103,7 @@ async function writeBlock(card: Card, block: number, data: number[]): Promise<vo
 /**
  * Get sector number for a block
  */
-function getSector(block: number): number {
+function getSector(block) {
   if (block < 128) {
     return Math.floor(block / 4);
   }
@@ -120,14 +114,14 @@ function getSector(block: number): number {
 /**
  * Check if block is a sector trailer
  */
-function isSectorTrailer(block: number): boolean {
+function isSectorTrailer(block) {
   if (block < 128) {
     return (block + 1) % 4 === 0;
   }
   return (block - 128 + 1) % 16 === 0;
 }
 
-function parseHexData(str: string): number[] {
+function parseHexData(str) {
   const clean = str.replace(/\s+/g, "").replace(/0x/gi, "");
   if (!/^[0-9a-fA-F]*$/.test(clean)) {
     throw new Error("Invalid hex string");
@@ -136,18 +130,18 @@ function parseHexData(str: string): number[] {
     throw new Error("Data must be exactly 32 hex characters (16 bytes)");
   }
 
-  const bytes: number[] = [];
+  const bytes = [];
   for (let i = 0; i < clean.length; i += 2) {
     bytes.push(parseInt(clean.substr(i, 2), 16));
   }
   return bytes;
 }
 
-function formatHex(buffer: Buffer): string {
-  return buffer.toString("hex").toUpperCase().match(/.{2}/g)!.join(" ");
+function formatHex(buffer) {
+  return buffer.toString("hex").toUpperCase().match(/.{2}/g).join(" ");
 }
 
-async function main(): Promise<void> {
+async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || "read";
 
@@ -217,9 +211,9 @@ async function main(): Promise<void> {
         const hexData = args[2];
 
         if (!hexData) {
-          console.log("Usage: npx ts-node mifare-read-write.ts write <block> <hex-data>");
+          console.log("Usage: node mifare-read-write.js write <block> <hex-data>");
           console.log(
-            'Example: npx ts-node mifare-read-write.ts write 4 "00112233445566778899AABBCCDDEEFF"',
+            'Example: node mifare-read-write.js write 4 "00112233445566778899AABBCCDDEEFF"',
           );
           break;
         }
@@ -279,7 +273,7 @@ async function main(): Promise<void> {
             );
           } catch (err) {
             console.log(
-              `  ${block.toString().padStart(2)}  |   ${sector.toString().padStart(2)}   | (read failed: ${(err as Error).message})`,
+              `  ${block.toString().padStart(2)}  |   ${sector.toString().padStart(2)}   | (read failed: ${err.message})`,
             );
             lastSector = -1; // Force re-auth on next block
           }
@@ -293,7 +287,7 @@ async function main(): Promise<void> {
 
     card.disconnect(SCARD_LEAVE_CARD);
   } catch (err) {
-    console.error(`Error: ${(err as Error).message}`);
+    console.error(`Error: ${err.message}`);
   } finally {
     ctx.close();
   }

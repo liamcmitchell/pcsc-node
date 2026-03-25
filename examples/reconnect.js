@@ -1,8 +1,8 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Demonstrates card.reconnect() for resetting or changing protocols
  *
- * Usage: npx ts-node reconnect.ts
+ * Usage: node reconnect.js
  *
  * The reconnect() method is useful when you need to:
  * - Reset the card to a known state
@@ -20,15 +20,15 @@ import {
   SCARD_RESET_CARD,
   SCARD_UNPOWER_CARD,
   SCARD_STATE_PRESENT,
-} from "../lib";
+} from "../lib/index.js";
 
-function protocolName(protocol: number): string {
+function protocolName(protocol) {
   if (protocol === SCARD_PROTOCOL_T0) return "T=0";
   if (protocol === SCARD_PROTOCOL_T1) return "T=1";
   return `Unknown (${protocol})`;
 }
 
-async function main(): Promise<void> {
+async function main() {
   console.log("Reconnect Example");
   console.log("=================\n");
 
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
       const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
       console.log(`Test command response: ${response.toString("hex")}`);
     } catch (err) {
-      console.log(`Test command failed: ${(err as Error).message}`);
+      console.log(`Test command failed: ${err.message}`);
     }
 
     // Reconnect with reset
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
       const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
       console.log(`Command after reset: ${response.toString("hex")}`);
     } catch (err) {
-      console.log(`Command failed: ${(err as Error).message}`);
+      console.log(`Command failed: ${err.message}`);
     }
 
     // Try to force a specific protocol (if supported)
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
       );
       console.log(`Protocol: ${protocolName(t0Protocol)}`);
     } catch (err) {
-      console.log(`T=0 not supported: ${(err as Error).message}`);
+      console.log(`T=0 not supported: ${err.message}`);
     }
 
     // Try T=1 only
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
       );
       console.log(`Protocol: ${protocolName(t1Protocol)}`);
     } catch (err) {
-      console.log(`T=1 not supported: ${(err as Error).message}`);
+      console.log(`T=1 not supported: ${err.message}`);
     }
 
     // Reconnect with unpower (cold reset)
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
       status = card.getStatus();
       console.log(`ATR: ${status.atr.toString("hex")}`);
     } catch (err) {
-      console.log(`Cold reset failed: ${(err as Error).message}`);
+      console.log(`Cold reset failed: ${err.message}`);
     }
 
     // Upgrade to exclusive mode
@@ -155,13 +155,13 @@ async function main(): Promise<void> {
       );
       console.log("Released exclusive access.");
     } catch (err) {
-      console.log(`Exclusive mode failed: ${(err as Error).message}`);
+      console.log(`Exclusive mode failed: ${err.message}`);
     }
 
     card.disconnect(SCARD_LEAVE_CARD);
     console.log("\nDone!");
   } catch (err) {
-    console.error(`Error: ${(err as Error).message}`);
+    console.error(`Error: ${err.message}`);
   } finally {
     ctx.close();
   }

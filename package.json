@@ -2,20 +2,44 @@
   "name": "smartcard",
   "version": "3.7.2",
   "description": "PC/SC bindings for Node.js using N-API - ABI stable across Node.js versions",
-  "author": "Tom KP",
+  "keywords": [
+    "acr122",
+    "card-reader",
+    "contactless",
+    "napi",
+    "nfc",
+    "node-addon-api",
+    "pcsc",
+    "pcsclite",
+    "rfid",
+    "smart-card",
+    "smartcard"
+  ],
+  "homepage": "https://github.com/tomkp/smartcard#readme",
+  "bugs": {
+    "url": "https://github.com/tomkp/smartcard/issues"
+  },
   "license": "MIT",
+  "author": "Tom KP",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tomkp/smartcard.git"
   },
-  "bugs": {
-    "url": "https://github.com/tomkp/smartcard/issues"
-  },
-  "homepage": "https://github.com/tomkp/smartcard#readme",
+  "files": [
+    "lib/",
+    "src/",
+    "binding.gyp",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "exports": "./lib/index.js",
-  "gypfile": true,
   "scripts": {
     "install": "node-gyp rebuild",
     "rebuild": "node-gyp rebuild",
@@ -25,18 +49,11 @@
     "test:coverage": "c8 --include=lib/**/*.js node --test test/unit/index.js",
     "typecheck": "tsc --noEmit",
     "coverage:report": "c8 report --reporter=text --reporter=html",
-    "lint": "oxlint lib test examples",
-    "lint:fix": "oxlint --fix lib test examples",
-    "fmt": "oxfmt --write lib test examples",
-    "fmt:check": "oxfmt --check lib test examples"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt --write",
+    "fmt:check": "oxfmt --check"
   },
-  "files": [
-    "lib/",
-    "src/",
-    "binding.gyp",
-    "README.md",
-    "LICENSE"
-  ],
   "dependencies": {
     "node-addon-api": "^7.0.0"
   },
@@ -51,22 +68,5 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "keywords": [
-    "pcsc",
-    "pcsclite",
-    "smartcard",
-    "smart-card",
-    "nfc",
-    "rfid",
-    "contactless",
-    "napi",
-    "node-addon-api",
-    "acr122",
-    "card-reader"
-  ]
+  "gypfile": true
 }

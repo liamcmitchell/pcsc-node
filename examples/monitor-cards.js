@@ -1,14 +1,13 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env node
 /**
  * Monitor for card insert/remove events using the high-level Devices API
  *
- * Usage: npx ts-node monitor-cards.ts
+ * Usage: node monitor-cards.js
  *
  * Press Ctrl+C to stop monitoring.
  */
 
-import { Devices } from "../lib";
-import type { Card, ReaderEventInfo } from "../lib/types";
+import { Devices } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
 console.log("==================");
@@ -16,15 +15,15 @@ console.log("Monitoring for card events. Press Ctrl+C to stop.\n");
 
 const devices = new Devices();
 
-devices.on("reader-attached", (reader: ReaderEventInfo) => {
+devices.on("reader-attached", (reader) => {
   console.log(`[+] Reader attached: ${reader.name}`);
 });
 
-devices.on("reader-detached", (reader: ReaderEventInfo) => {
+devices.on("reader-detached", (reader) => {
   console.log(`[-] Reader detached: ${reader.name}`);
 });
 
-devices.on("card-inserted", async ({ reader, card }: { reader: ReaderEventInfo; card: Card }) => {
+devices.on("card-inserted", async ({ reader, card }) => {
   console.log(`\n[*] Card inserted in: ${reader.name}`);
 
   // Get ATR
@@ -32,7 +31,7 @@ devices.on("card-inserted", async ({ reader, card }: { reader: ReaderEventInfo; 
     const status = card.getStatus();
     console.log(`    ATR: ${status.atr.toString("hex")}`);
   } catch (err) {
-    console.log(`    Could not get ATR: ${(err as Error).message}`);
+    console.log(`    Could not get ATR: ${err.message}`);
   }
 
   // Try to read UID
@@ -53,11 +52,11 @@ devices.on("card-inserted", async ({ reader, card }: { reader: ReaderEventInfo; 
   console.log();
 });
 
-devices.on("card-removed", ({ reader }: { reader: ReaderEventInfo }) => {
+devices.on("card-removed", ({ reader }) => {
   console.log(`[*] Card removed from: ${reader.name}\n`);
 });
 
-devices.on("error", (err: Error) => {
+devices.on("error", (err) => {
   // Ignore common transient errors
   const ignorable = ["unresponsive", "Sharing violation", "cancelled"];
   if (!ignorable.some((msg) => err.message.includes(msg))) {
