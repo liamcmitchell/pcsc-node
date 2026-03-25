@@ -79,6 +79,7 @@ node dist/examples/error-handling.js
 ```
 
 Shows how to catch and handle:
+
 - `CardRemovedError` - Card removed during operation
 - `TimeoutError` - Operation timed out
 - `NoReadersError` - No readers available
@@ -105,6 +106,7 @@ node dist/examples/control-command.js
 ```
 
 Demonstrates:
+
 - Using `card.control()` to send control commands
 - Querying reader features with `CM_IOCTL_GET_FEATURE_REQUEST`
 - Using `parseFeatures()` to decode TLV responses
@@ -119,6 +121,7 @@ node dist/examples/reconnect.js
 ```
 
 Demonstrates:
+
 - `card.reconnect()` with different initialization modes
 - Switching between T=0 and T=1 protocols
 - Upgrading to exclusive access
@@ -139,45 +142,45 @@ node dist/examples/mifare-read-write.js dump            # Dump all readable bloc
 
 ## Common APDU Commands
 
-| Command | APDU | Description |
-|---------|------|-------------|
-| Get UID | `FF CA 00 00 00` | Get card UID (contactless via PC/SC) |
-| Get ATS | `FF CA 01 00 00` | Get ATS (contactless) |
-| Select by AID | `00 A4 04 00 <len> <AID>` | Select application by AID |
-| Read Binary | `00 B0 <P1> <P2> <Le>` | Read data from file |
-| Get Challenge | `00 84 00 00 08` | Get 8-byte random challenge |
+| Command       | APDU                      | Description                          |
+| ------------- | ------------------------- | ------------------------------------ |
+| Get UID       | `FF CA 00 00 00`          | Get card UID (contactless via PC/SC) |
+| Get ATS       | `FF CA 01 00 00`          | Get ATS (contactless)                |
+| Select by AID | `00 A4 04 00 <len> <AID>` | Select application by AID            |
+| Read Binary   | `00 B0 <P1> <P2> <Le>`    | Read data from file                  |
+| Get Challenge | `00 84 00 00 08`          | Get 8-byte random challenge          |
 
 ## MIFARE Classic Commands (via PC/SC)
 
-| Command | APDU | Description |
-|---------|------|-------------|
-| Load Key | `FF 82 00 <slot> 06 <key>` | Load 6-byte key into reader |
+| Command      | APDU                                         | Description                    |
+| ------------ | -------------------------------------------- | ------------------------------ |
+| Load Key     | `FF 82 00 <slot> 06 <key>`                   | Load 6-byte key into reader    |
 | Authenticate | `FF 86 00 00 05 01 00 <block> <type> <slot>` | Auth with key A (60) or B (61) |
-| Read Block | `FF B0 00 <block> 10` | Read 16 bytes |
-| Write Block | `FF D6 00 <block> 10 <data>` | Write 16 bytes |
+| Read Block   | `FF B0 00 <block> 10`                        | Read 16 bytes                  |
+| Write Block  | `FF D6 00 <block> 10 <data>`                 | Write 16 bytes                 |
 
 ## Response Status Words
 
-| SW | Meaning |
-|----|---------|
-| 9000 | Success |
+| SW   | Meaning                               |
+| ---- | ------------------------------------- |
+| 9000 | Success                               |
 | 61XX | XX bytes available (use GET RESPONSE) |
-| 6CXX | Wrong Le, retry with Le=XX |
-| 6300 | Authentication failed |
-| 6A82 | File not found |
-| 6A86 | Incorrect P1-P2 |
-| 6D00 | Instruction not supported |
-| 6E00 | Class not supported |
+| 6CXX | Wrong Le, retry with Le=XX            |
+| 6300 | Authentication failed                 |
+| 6A82 | File not found                        |
+| 6A86 | Incorrect P1-P2                       |
+| 6D00 | Instruction not supported             |
+| 6E00 | Class not supported                   |
 
 ## Error Classes
 
 ```javascript
 const {
-    PCSCError,           // Base class with error code
-    CardRemovedError,    // Card removed (0x80100069)
-    TimeoutError,        // Timeout (0x8010000A)
-    NoReadersError,      // No readers (0x8010002E)
-    ServiceNotRunningError,  // Service down (0x8010001D)
-    SharingViolationError,   // Card in use (0x8010000B)
-} = require('smartcard');
+  PCSCError, // Base class with error code
+  CardRemovedError, // Card removed (0x80100069)
+  TimeoutError, // Timeout (0x8010000A)
+  NoReadersError, // No readers (0x8010002E)
+  ServiceNotRunningError, // Service down (0x8010001D)
+  SharingViolationError, // Card in use (0x8010000B)
+} = require("smartcard");
 ```

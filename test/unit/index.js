@@ -82,10 +82,9 @@ describe("MockCard", () => {
     const card = new MockCard(1, Buffer.from([0x3b]));
     card.disconnect();
 
-    await assert.rejects(
-      async () => card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]),
-      { message: "Card is not connected" },
-    );
+    await assert.rejects(async () => card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]), {
+      message: "Card is not connected",
+    });
   });
 
   it("should get card status", () => {
@@ -117,11 +116,7 @@ describe("MockCard", () => {
     const newProtocol = await card.reconnect();
 
     assert.strictEqual(newProtocol, 2, "reconnect should return new protocol");
-    assert.strictEqual(
-      card.protocol,
-      2,
-      "card.protocol should be updated after reconnect",
-    );
+    assert.strictEqual(card.protocol, 2, "card.protocol should be updated after reconnect");
   });
 
   it("should accept maxRecvLength option in transmit", async () => {
@@ -349,9 +344,7 @@ describe("createTestSetup Helper", () => {
       ],
     });
 
-    const response = await setup.card.transmit(
-      Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]),
-    );
+    const response = await setup.card.transmit(Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]));
     assert.deepStrictEqual(response, Buffer.from([0x01, 0x02, 0x90, 0x00]));
   });
 
@@ -460,9 +453,7 @@ describe("MockDevices Integration", () => {
     assert.strictEqual(events[0].reader.name, "ACR122U");
     assert(events[0].card);
 
-    const response = await events[0].card.transmit([
-      0xff, 0xca, 0x00, 0x00, 0x00,
-    ]);
+    const response = await events[0].card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x90, 0x00])));
 
     devices.stop();
@@ -509,14 +500,8 @@ describe("MockDevices Integration", () => {
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
-    const reader1 = new MockReader(
-      "Reader 1",
-      new MockCard(1, Buffer.from([0x3b])),
-    );
-    const reader2 = new MockReader(
-      "Reader 2",
-      new MockCard(2, Buffer.from([0x3c])),
-    );
+    const reader1 = new MockReader("Reader 1", new MockCard(1, Buffer.from([0x3b])));
+    const reader2 = new MockReader("Reader 2", new MockCard(2, Buffer.from([0x3c])));
 
     mockContext.addReader(reader1);
     mockContext.addReader(reader2);
@@ -619,28 +604,16 @@ describe("isUnresponsiveCardError", () => {
   });
 
   it("should return false for non-Error objects", () => {
-    assert.strictEqual(
-      isUnresponsiveCardError(/** @type {any} */ ("string error")),
-      false,
-    );
-    assert.strictEqual(
-      isUnresponsiveCardError(/** @type {any} */ (null)),
-      false,
-    );
-    assert.strictEqual(
-      isUnresponsiveCardError(/** @type {any} */ (undefined)),
-      false,
-    );
+    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ ("string error")), false);
+    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ (null)), false);
+    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ (undefined)), false);
   });
 });
 
 describe("Protocol Fallback (Issue #34)", () => {
   it("should fallback to T=0 when dual protocol fails with unresponsive error", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    const mockReader = new UnresponsiveDualProtocolReader(
-      "Test Reader",
-      mockCard,
-    );
+    const mockReader = new UnresponsiveDualProtocolReader("Test Reader", mockCard);
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
@@ -670,22 +643,14 @@ describe("Protocol Fallback (Issue #34)", () => {
 
     assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
     assert.strictEqual(errors.length, 0, "Should not emit error");
-    assert.strictEqual(
-      mockReader.connectAttempts,
-      2,
-      "Should attempt connect twice (fallback)",
-    );
+    assert.strictEqual(mockReader.connectAttempts, 2, "Should attempt connect twice (fallback)");
 
     devices.stop();
   });
 
   it("should rethrow non-unresponsive errors without fallback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    const mockReader = new FailingMockReader(
-      "Test Reader",
-      mockCard,
-      "Sharing violation",
-    );
+    const mockReader = new FailingMockReader("Test Reader", mockCard, "Sharing violation");
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
@@ -713,21 +678,13 @@ describe("Protocol Fallback (Issue #34)", () => {
     devices.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(
-      cardEvents.length,
-      0,
-      "Should not emit card-inserted event",
-    );
+    assert.strictEqual(cardEvents.length, 0, "Should not emit card-inserted event");
     assert.strictEqual(errors.length, 1, "Should emit error");
     assert(
       errors[0].message.includes("Sharing violation"),
       "Error should contain original message",
     );
-    assert.strictEqual(
-      mockReader.connectAttempts,
-      1,
-      "Should only attempt connect once",
-    );
+    assert.strictEqual(mockReader.connectAttempts, 1, "Should only attempt connect once");
 
     devices.stop();
   });
@@ -764,11 +721,7 @@ describe("Protocol Fallback (Issue #34)", () => {
 
     assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
     assert.strictEqual(errors.length, 0, "Should not emit error");
-    assert.strictEqual(
-      mockReader.connectAttempts,
-      1,
-      "Should only attempt connect once",
-    );
+    assert.strictEqual(mockReader.connectAttempts, 1, "Should only attempt connect once");
 
     devices.stop();
   });
@@ -888,10 +841,7 @@ describe("parseFeatures (Issue #86)", () => {
     const features = parseFeatures(tlv);
 
     assert.strictEqual(features.size, 1, "Should have one feature");
-    assert(
-      features.has(FEATURE_VERIFY_PIN_DIRECT),
-      "Should have VERIFY_PIN_DIRECT",
-    );
+    assert(features.has(FEATURE_VERIFY_PIN_DIRECT), "Should have VERIFY_PIN_DIRECT");
     assert.strictEqual(features.get(FEATURE_VERIFY_PIN_DIRECT), 0x42000d48);
   });
 
@@ -934,19 +884,9 @@ describe("parseFeatures (Issue #86)", () => {
     ]);
     const features = parseFeatures(tlv);
 
-    assert.strictEqual(
-      features.size,
-      1,
-      "Should have one feature (skipped invalid)",
-    );
-    assert(
-      !features.has(FEATURE_VERIFY_PIN_DIRECT),
-      "Should not have skipped feature",
-    );
-    assert(
-      features.has(FEATURE_MODIFY_PIN_DIRECT),
-      "Should have valid feature",
-    );
+    assert.strictEqual(features.size, 1, "Should have one feature (skipped invalid)");
+    assert(!features.has(FEATURE_VERIFY_PIN_DIRECT), "Should not have skipped feature");
+    assert(features.has(FEATURE_MODIFY_PIN_DIRECT), "Should have valid feature");
   });
 
   it("should handle truncated buffer gracefully", () => {
@@ -954,11 +894,7 @@ describe("parseFeatures (Issue #86)", () => {
     const tlv = Buffer.from([0x06, 0x04, 0x42]); // only 3 bytes after tag+length
     const features = parseFeatures(tlv);
 
-    assert.strictEqual(
-      features.size,
-      0,
-      "Should return empty map for truncated buffer",
-    );
+    assert.strictEqual(features.size, 0, "Should return empty map for truncated buffer");
   });
 
   it("should handle buffer shorter than minimum TLV", () => {
@@ -1012,11 +948,7 @@ describe("parseFeatures (Issue #86)", () => {
     const features = parseFeatures(tlv);
 
     // Should safely skip this malformed entry and not crash
-    assert.strictEqual(
-      features.size,
-      0,
-      "Should return empty map for malformed length",
-    );
+    assert.strictEqual(features.size, 0, "Should return empty map for malformed length");
   });
 
   it("should handle length that exactly exceeds remaining bytes", () => {
@@ -1051,19 +983,13 @@ describe("APDU Building Utilities (Issue #98)", () => {
     it("should append Le to Case 1 command (4 bytes, no Le)", () => {
       const cmd = Buffer.from([0x00, 0xa4, 0x04, 0x00]);
       const corrected = correctLeInCommand(cmd, 0x10);
-      assert.deepStrictEqual(
-        corrected,
-        Buffer.from([0x00, 0xa4, 0x04, 0x00, 0x10]),
-      );
+      assert.deepStrictEqual(corrected, Buffer.from([0x00, 0xa4, 0x04, 0x00, 0x10]));
     });
 
     it("should replace Le in Case 2 command (5 bytes, Le at end)", () => {
       const cmd = Buffer.from([0x00, 0xb0, 0x00, 0x00, 0xff]);
       const corrected = correctLeInCommand(cmd, 0x20);
-      assert.deepStrictEqual(
-        corrected,
-        Buffer.from([0x00, 0xb0, 0x00, 0x00, 0x20]),
-      );
+      assert.deepStrictEqual(corrected, Buffer.from([0x00, 0xb0, 0x00, 0x00, 0x20]));
     });
 
     it("should replace Le in Case 3/4 command (Lc + data + Le)", () => {
@@ -1101,11 +1027,7 @@ describe("Package Exports (Issue #78)", () => {
   it("should have type: module for ESM", () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
-    assert.strictEqual(
-      packageJson.type,
-      "module",
-      'type should be "module" for ESM',
-    );
+    assert.strictEqual(packageJson.type, "module", 'type should be "module" for ESM');
   });
 });
 
@@ -1165,10 +1087,7 @@ describe("Get Connected Cards (Issue #80)", () => {
     assert(cards.has("ACR122U"), "Should be keyed by reader name");
     const card = cards.get("ACR122U");
     assert(card, "Card should exist");
-    assert(
-      card.atr.equals(Buffer.from([0x3b, 0x8f])),
-      "Card should have correct ATR",
-    );
+    assert(card.atr.equals(Buffer.from([0x3b, 0x8f])), "Card should have correct ATR");
 
     devices.stop();
   });
@@ -1252,11 +1171,7 @@ describe("Get Connected Cards (Issue #80)", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const card = devices.getCard("ACR122U");
-    assert.strictEqual(
-      card,
-      null,
-      "Should return null when reader has no card",
-    );
+    assert.strictEqual(card, null, "Should return null when reader has no card");
 
     devices.stop();
   });
@@ -1285,10 +1200,7 @@ describe("Get Connected Cards (Issue #80)", () => {
 
     const card = devices.getCard("ACR122U");
     assert(card, "Should return card");
-    assert(
-      card.atr.equals(Buffer.from([0x3b, 0x8f])),
-      "Card should have correct ATR",
-    );
+    assert(card.atr.equals(Buffer.from([0x3b, 0x8f])), "Card should have correct ATR");
 
     devices.stop();
   });
@@ -1315,20 +1227,12 @@ describe("Get Connected Cards (Issue #80)", () => {
     devices.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(
-      devices.getCards().size,
-      1,
-      "Should have one card initially",
-    );
+    assert.strictEqual(devices.getCards().size, 1, "Should have one card initially");
 
     mockMonitor.removeCard("ACR122U");
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(
-      devices.getCards().size,
-      0,
-      "Should have no cards after removal",
-    );
+    assert.strictEqual(devices.getCards().size, 0, "Should have no cards after removal");
     assert.strictEqual(
       devices.getCard("ACR122U"),
       null,
@@ -1371,18 +1275,15 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
         response: [
-          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59,
-          0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01,
-          0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
+          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44,
+          0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
         ],
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
+      autoGetResponse: true,
+    });
 
     // Should have sent 2 commands
     assert.strictEqual(mockCard.transmitCount, 2);
@@ -1405,17 +1306,15 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       {
         command: [0x00, 0xb2, 0x01, 0x0c, 0x10],
         response: [
-          0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-          0x07, 0x08, 0x9f, 0x09, 0x02, 0x90, 0x00,
+          0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x9f, 0x09,
+          0x02, 0x90, 0x00,
         ],
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xb2, 0x01, 0x0c, 0x00],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xb2, 0x01, 0x0c, 0x00], {
+      autoGetResponse: true,
+    });
 
     // Should have sent 2 commands
     assert.strictEqual(mockCard.transmitCount, 2);
@@ -1437,8 +1336,8 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x10],
         response: [
-          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
-          0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x61, 0x08,
+          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+          0x10, 0x61, 0x08,
         ],
       },
       // Second GET RESPONSE - final data
@@ -1448,11 +1347,9 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xca, 0x00, 0x00, 0x00],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xca, 0x00, 0x00, 0x00], {
+      autoGetResponse: true,
+    });
 
     // Should have sent 3 commands
     assert.strictEqual(mockCard.transmitCount, 3);
@@ -1475,11 +1372,9 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0xff, 0xca, 0x00, 0x00, 0x00],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0xff, 0xca, 0x00, 0x00, 0x00], {
+      autoGetResponse: true,
+    });
 
     // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
@@ -1496,11 +1391,9 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: false },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
+      autoGetResponse: false,
+    });
 
     // Should only transmit once - no automatic GET RESPONSE
     assert.strictEqual(mockCard.transmitCount, 1);
@@ -1517,11 +1410,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      {},
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {});
 
     // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
@@ -1538,11 +1427,9 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
+      autoGetResponse: true,
+    });
 
     // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
@@ -1564,11 +1451,9 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       },
     ]);
 
-    const response = await transmitWithAutoResponse(
-      mockCard,
-      [0x00, 0xca, 0x9f, 0x17],
-      { autoGetResponse: true },
-    );
+    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xca, 0x9f, 0x17], {
+      autoGetResponse: true,
+    });
 
     assert.strictEqual(mockCard.transmitCount, 2);
     assert(response.equals(Buffer.from([0x03, 0x90, 0x00])));
@@ -1588,9 +1473,8 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
         response: [
-          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59,
-          0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01,
-          0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
+          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44,
+          0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
         ],
       },
     ]);
@@ -1628,11 +1512,7 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     });
 
     // Should have sent 2 commands (initial + GET RESPONSE)
-    assert.strictEqual(
-      mockCard.transmitCount,
-      2,
-      "Should have sent 2 commands",
-    );
+    assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
 
     // Response should be data (28 bytes) + 90 00
     assert.strictEqual(response.length, 30, "Response should be 30 bytes");
@@ -1652,8 +1532,8 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
       {
         command: [0x00, 0xb2, 0x01, 0x0c, 0x10],
         response: [
-          0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-          0x07, 0x08, 0x9f, 0x09, 0x02, 0x90, 0x00,
+          0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x9f, 0x09,
+          0x02, 0x90, 0x00,
         ],
       },
     ]);
@@ -1690,11 +1570,7 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     });
 
     // Should have sent 2 commands
-    assert.strictEqual(
-      mockCard.transmitCount,
-      2,
-      "Should have sent 2 commands",
-    );
+    assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
 
     // Response should be successful
     assert.strictEqual(response[response.length - 2], 0x90);
@@ -1741,10 +1617,7 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
 
     assert.strictEqual(mockCard.transmitCount, 1, "Should only transmit once");
-    assert(
-      response.equals(Buffer.from([0x61, 0x1c])),
-      "Should return raw response",
-    );
+    assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
 
     devices.stop();
   });

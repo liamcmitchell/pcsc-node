@@ -101,10 +101,7 @@ describe("Card operations (hardware dependent)", () => {
     try {
       const readers = ctx.listReaders();
       const reader = readers.find((r) => (r.state & SCARD_STATE_PRESENT) !== 0);
-      const card = await reader.connect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-      );
+      const card = await reader.connect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
       assert(card, "Should return a card object");
       assert(card.connected, "Card should be connected");
       assert(typeof card.protocol === "number", "Protocol should be a number");
@@ -123,10 +120,7 @@ describe("Card operations (hardware dependent)", () => {
     try {
       const readers = ctx.listReaders();
       const reader = readers.find((r) => (r.state & SCARD_STATE_PRESENT) !== 0);
-      const card = await reader.connect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-      );
+      const card = await reader.connect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
 
       try {
         const selectCmd = Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]);
@@ -151,20 +145,11 @@ describe("Card operations (hardware dependent)", () => {
     try {
       const readers = ctx.listReaders();
       const reader = readers.find((r) => (r.state & SCARD_STATE_PRESENT) !== 0);
-      const card = await reader.connect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-      );
+      const card = await reader.connect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
 
       const status = card.getStatus();
-      assert(
-        typeof status.state === "number",
-        "Status state should be a number",
-      );
-      assert(
-        typeof status.protocol === "number",
-        "Status protocol should be a number",
-      );
+      assert(typeof status.state === "number", "Status state should be a number");
+      assert(typeof status.protocol === "number", "Status protocol should be a number");
       assert(Buffer.isBuffer(status.atr), "Status ATR should be a buffer");
 
       card.disconnect(SCARD_LEAVE_CARD);
@@ -190,12 +175,7 @@ describe("Devices (Event API)", () => {
       }, 1000);
 
       devices.on("error", (err) => {
-        const expectedErrors = [
-          "No readers",
-          "service",
-          "unresponsive",
-          "Sharing violation",
-        ];
+        const expectedErrors = ["No readers", "service", "unresponsive", "Sharing violation"];
         const isExpected = expectedErrors.some((msg) =>
           err.message.toLowerCase().includes(msg.toLowerCase()),
         );
@@ -240,12 +220,7 @@ describe("Devices (Event API)", () => {
       }, 1000);
 
       devices.on("error", (err) => {
-        const expectedErrors = [
-          "No readers",
-          "service",
-          "unresponsive",
-          "Sharing violation",
-        ];
+        const expectedErrors = ["No readers", "service", "unresponsive", "Sharing violation"];
         const isExpected = expectedErrors.some((msg) =>
           err.message.toLowerCase().includes(msg.toLowerCase()),
         );
