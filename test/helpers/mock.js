@@ -422,92 +422,6 @@ class FailingMockReader extends MockReader {
   }
 }
 
-/**
- * A mock reader that delays before connecting
- */
-class SlowMockReader extends MockReader {
-  /**
-   * @param {string} name
-   * @param {MockCard | null} [card]
-   * @param {number} [delay]
-   */
-  constructor(name, card = null, delay = 100) {
-    super(name, card);
-    this._delay = delay;
-  }
-
-  async connect(_shareMode, _protocol) {
-    this._connectAttempts++;
-    if (!this._card) {
-      throw new Error("No card in reader");
-    }
-    await new Promise((resolve) => setTimeout(resolve, this._delay));
-    return this._card;
-  }
-}
-
-/**
- * A mock reader that fails on the first N connect attempts, then succeeds
- */
-class IntermittentFailureMockReader extends MockReader {
-  /**
-   * @param {string} name
-   * @param {MockCard | null} [card]
-   * @param {number} [failureCount]
-   * @param {string} [errorMessage]
-   */
-  constructor(
-    name,
-    card = null,
-    failureCount = 1,
-    errorMessage = "Temporary failure",
-  ) {
-    super(name, card);
-    this._failureCount = failureCount;
-    this._errorMessage = errorMessage;
-  }
-
-  async connect(_shareMode, _protocol) {
-    this._connectAttempts++;
-    if (!this._card) {
-      throw new Error("No card in reader");
-    }
-    if (this._connectAttempts <= this._failureCount) {
-      throw new Error(this._errorMessage);
-    }
-    return this._card;
-  }
-}
-
-/**
- * A mock card that fails transmit after a certain number of commands
- */
-class UnstableMockCard extends MockCard {
-  /**
-   * @param {number} protocol
-   * @param {Buffer} atr
-   * @param {Array<{command: Buffer | number[], response: Buffer | number[]}>} [responses]
-   * @param {number} [failAfter]
-   */
-  constructor(protocol, atr, responses = [], failAfter = 3) {
-    super(protocol, atr, responses);
-    this._failAfter = failAfter;
-  }
-
-  async transmit(command, options = {}) {
-    if (!this.connected) {
-      throw new Error("Card is not connected");
-    }
-
-    if (this.transmitCount >= this._failAfter) {
-      this.disconnect();
-      throw new Error("Card was removed");
-    }
-
-    return super.transmit(command, options);
-  }
-}
-
 export {
   MockCard,
   MockReader,
@@ -517,9 +431,6 @@ export {
   createTestSetup,
   UnresponsiveDualProtocolReader,
   FailingMockReader,
-  SlowMockReader,
-  IntermittentFailureMockReader,
-  UnstableMockCard,
   SCARD_PROTOCOL_T0,
   SCARD_PROTOCOL_T1,
 };
