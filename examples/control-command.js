@@ -82,12 +82,16 @@ async function main() {
     if (hasCard) {
       // If card is present, use shared mode
       console.log("Card present, connecting in shared mode...");
-      card = await reader.connect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
+      card = await ctx.connect(
+        reader.name,
+        SCARD_SHARE_SHARED,
+        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+      );
     } else {
       // No card, try direct mode (reader-only commands)
       console.log("No card present, connecting in direct mode...");
       try {
-        card = await reader.connect(SCARD_SHARE_DIRECT, SCARD_PROTOCOL_UNDEFINED);
+        card = await ctx.connect(reader.name, SCARD_SHARE_DIRECT, SCARD_PROTOCOL_UNDEFINED);
       } catch {
         console.log("Direct mode not supported by this reader.");
         console.log("Insert a card and try again.");

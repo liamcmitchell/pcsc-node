@@ -1,6 +1,5 @@
 #include <napi.h>
 #include "pcsc_context.h"
-#include "pcsc_reader.h"
 #include "pcsc_card.h"
 #include "reader_monitor.h"
 #include "platform/pcsc.h"
@@ -41,7 +40,6 @@ void ExportConstants(Napi::Env env, Napi::Object exports) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     // Initialize wrapper classes
     PCSCContext::Init(env, exports);
-    PCSCReader::Init(env, exports);
     PCSCCard::Init(env, exports);
     ReaderMonitor::Init(env, exports);
 

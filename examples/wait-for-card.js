@@ -118,7 +118,8 @@ async function main() {
 
     // Connect to the card
     console.log("\nConnecting to card...");
-    const card = await readerWithCard.connect(
+    const card = await ctx.connect(
+      readerWithCard.name,
       SCARD_SHARE_SHARED,
       SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
     );

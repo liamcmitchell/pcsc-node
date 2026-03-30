@@ -1,5 +1,4 @@
 #include "pcsc_context.h"
-#include "pcsc_reader.h"
 #include "pcsc_errors.h"
 #include "async_workers.h"
 #include <cstring>
@@ -9,6 +8,7 @@ Napi::FunctionReference PCSCContext::constructor;
 Napi::Object PCSCContext::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "Context", {
         InstanceMethod("listReaders", &PCSCContext::ListReaders),
+        InstanceMethod("connect", &PCSCContext::Connect),
         InstanceMethod("waitForChange", &PCSCContext::WaitForChange),
         InstanceMethod("cancel", &PCSCContext::Cancel),
         InstanceMethod("close", &PCSCContext::Close),
@@ -99,20 +99,64 @@ Napi::Value PCSCContext::ListReaders(const Napi::CallbackInfo& info) {
     // Get current state (non-blocking with 0 timeout)
     result = SCardGetStatusChange(context_, 0, states.data(), states.size());
 
-    // Create Reader objects
+    // Create plain reader objects
     Napi::Array readers = Napi::Array::New(env, readerNames.size());
     for (size_t i = 0; i < readerNames.size(); i++) {
-        std::vector<uint8_t> atr;
-        if (result == SCARD_S_SUCCESS && states[i].cbAtr > 0) {
-            atr.assign(states[i].rgbAtr, states[i].rgbAtr + states[i].cbAtr);
-        }
         DWORD state = (result == SCARD_S_SUCCESS) ? states[i].dwEventState : 0;
 
-        Napi::Object reader = PCSCReader::NewInstance(env, context_, readerNames[i], state, atr);
+        Napi::Object reader = Napi::Object::New(env);
+        reader.Set("name", Napi::String::New(env, readerNames[i]));
+        reader.Set("state", Napi::Number::New(env, state));
+
+        if (result == SCARD_S_SUCCESS && states[i].cbAtr > 0) {
+            reader.Set("atr", Napi::Buffer<uint8_t>::Copy(
+                env, states[i].rgbAtr, states[i].cbAtr));
+        } else {
+            reader.Set("atr", env.Null());
+        }
+
         readers.Set(static_cast<uint32_t>(i), reader);
     }
 
     return readers;
+}
+
+Napi::Value PCSCContext::Connect(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (!valid_) {
+        Napi::Error::New(env, "Context is not valid").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // First argument: reader name (required)
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::TypeError::New(env, "Reader name (string) is required").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    std::string readerName = info[0].As<Napi::String>().Utf8Value();
+
+    // Parse optional arguments: shareMode, preferredProtocols
+    DWORD shareMode = SCARD_SHARE_SHARED;
+    DWORD preferredProtocols = SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1;
+
+    if (info.Length() > 1 && info[1].IsNumber()) {
+        shareMode = info[1].As<Napi::Number>().Uint32Value();
+    }
+
+    if (info.Length() > 2 && info[2].IsNumber()) {
+        preferredProtocols = info[2].As<Napi::Number>().Uint32Value();
+    }
+
+    // Create promise for async connection
+    Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+
+    ConnectWorker* worker = new ConnectWorker(
+        env, context_, readerName, shareMode, preferredProtocols, deferred);
+    worker->Queue();
+
+    return deferred.Promise();
 }
 
 Napi::Value PCSCContext::WaitForChange(const Napi::CallbackInfo& info) {

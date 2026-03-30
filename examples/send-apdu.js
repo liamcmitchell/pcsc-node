@@ -89,7 +89,11 @@ async function main() {
       return;
     }
 
-    const card = await reader.connect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
+    const card = await ctx.connect(
+      reader.name,
+      SCARD_SHARE_SHARED,
+      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+    );
 
     const protocolName = card.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1";
     console.log(`Protocol: ${protocolName}`);

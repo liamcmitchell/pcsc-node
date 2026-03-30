@@ -222,6 +222,23 @@ class MockContext {
   removeReader(name) {
     this._readers = this._readers.filter((r) => r.name !== name);
   }
+
+  /**
+   * @param {string} readerName
+   * @param {number} [_shareMode]
+   * @param {number} [_protocol]
+   * @returns {Promise<MockCard>}
+   */
+  async connect(readerName, _shareMode, _protocol) {
+    if (!this._valid) {
+      throw new Error("Context is not valid");
+    }
+    const reader = this._readers.find((r) => r.name === readerName);
+    if (!reader) {
+      throw new Error(`Reader not found: ${readerName}`);
+    }
+    return reader.connect(_shareMode, _protocol);
+  }
 }
 
 class MockReaderMonitor {

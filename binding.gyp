@@ -6,7 +6,6 @@
         "sources": [
             "src/addon.cpp",
             "src/pcsc_context.cpp",
-            "src/pcsc_reader.cpp",
             "src/pcsc_card.cpp",
             "src/async_workers.cpp",
             "src/reader_monitor.cpp"

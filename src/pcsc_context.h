@@ -25,6 +25,7 @@ private:
 
     // JavaScript-exposed methods
     Napi::Value ListReaders(const Napi::CallbackInfo& info);
+    Napi::Value Connect(const Napi::CallbackInfo& info);
     Napi::Value WaitForChange(const Napi::CallbackInfo& info);
     Napi::Value Cancel(const Napi::CallbackInfo& info);
     Napi::Value Close(const Napi::CallbackInfo& info);

@@ -523,21 +523,20 @@ describe("Protocol Fallback", () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
     const mockReader = new MockReader("Test Reader", mockCard);
     let connectCalls = 0;
-    mockReader.connect = async function connect(_shareMode, protocol) {
-      connectCalls++;
-      if (!this._card) {
-        throw new Error("No card in reader");
-      }
-      if (protocol & SCARD_PROTOCOL_T1) {
-        throw new Error("Card is unresponsive");
-      }
-      return this._card;
-    };
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
+
+    const originalConnect = mockContext.connect.bind(mockContext);
+    mockContext.connect = async function connect(readerName, _shareMode, protocol) {
+      connectCalls++;
+      if (protocol & SCARD_PROTOCOL_T1) {
+        throw new Error("Card is unresponsive");
+      }
+      return originalConnect(readerName, _shareMode, protocol);
+    };
 
     /** @type {unknown[]} */
     const cardEvents = [];
@@ -563,14 +562,15 @@ describe("Protocol Fallback", () => {
   it("should rethrow non-unresponsive errors without fallback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
     const mockReader = new MockReader("Test Reader", mockCard);
-    mockReader.connect = async function connect() {
-      throw new Error("Sharing violation");
-    };
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
+
+    mockContext.connect = async function connect() {
+      throw new Error("Sharing violation");
+    };
 
     /** @type {unknown[]} */
     const cardEvents = [];

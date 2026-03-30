@@ -52,7 +52,11 @@ async function lowLevelExample() {
 
     // Try to connect with exclusive access (may fail if card is in use)
     console.log("Attempting exclusive connection...");
-    const card = await reader.connect(SCARD_SHARE_EXCLUSIVE, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1);
+    const card = await ctx.connect(
+      reader.name,
+      SCARD_SHARE_EXCLUSIVE,
+      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+    );
 
     console.log("Connected! Sending command...");
 
@@ -171,7 +175,7 @@ async function errorRecoveryExample() {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`Connection attempt ${attempt}/${maxRetries}...`);
-        card = await reader.connect();
+        card = await ctx.connect(reader.name);
         console.log("Connected successfully!");
         break;
       } catch (err) {
