@@ -9,7 +9,7 @@
 
 import {
   Context,
-  Devices,
+  createClient,
   PCSCError,
   CardRemovedError,
   TimeoutError,
@@ -87,63 +87,63 @@ async function lowLevelExample() {
 }
 
 /**
- * Example 2: Handling errors with the high-level Devices API
+ * Example 2: Handling errors with the high-level API
  */
 export function highLevelExample() {
   console.log("\n=== High-Level Error Handling ===\n");
 
-  const devices = new Devices();
+  const client = createClient({
+    async onCardInserted({ name, card }) {
+      console.log(`Card inserted in ${name}`);
 
-  devices.on("card-inserted", async ({ reader, card }) => {
-    console.log(`Card inserted in ${reader.name}`);
+      try {
+        // This might fail if card is removed quickly
+        const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
+        const sw = (response[response.length - 2] << 8) | response[response.length - 1];
 
-    try {
-      // This might fail if card is removed quickly
-      const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      const sw = (response[response.length - 2] << 8) | response[response.length - 1];
-
-      if (sw === 0x9000) {
-        console.log(`UID: ${response.subarray(0, -2).toString("hex")}`);
+        if (sw === 0x9000) {
+          console.log(`UID: ${response.subarray(0, -2).toString("hex")}`);
+        }
+      } catch (err) {
+        if (err instanceof CardRemovedError) {
+          console.log("Card was removed before we could read it.");
+        } else if (err instanceof PCSCError) {
+          console.log(`Card error: ${err.message} (code: 0x${err.code.toString(16)})`);
+        } else {
+          console.log(`Error: ${err.message}`);
+        }
       }
-    } catch (err) {
-      if (err instanceof CardRemovedError) {
-        console.log("Card was removed before we could read it.");
-      } else if (err instanceof PCSCError) {
-        console.log(`Card error: ${err.message} (code: 0x${err.code.toString(16)})`);
+    },
+
+    onError(err) {
+      // The client calls onError for errors that occur during monitoring
+      if (err instanceof ServiceNotRunningError) {
+        console.log("PC/SC service stopped.");
+        client.stop();
+      } else if (err instanceof SharingViolationError) {
+        // This can happen if another app grabs the card first
+        console.log("Could not connect to card - in use by another app.");
       } else {
-        console.log(`Error: ${err.message}`);
+        console.log(`Monitor error: ${err.message}`);
       }
-    }
-  });
+    },
 
-  devices.on("error", (err) => {
-    // The Devices class emits errors that occur during monitoring
-    if (err instanceof ServiceNotRunningError) {
-      console.log("PC/SC service stopped.");
-      devices.stop();
-    } else if (err instanceof SharingViolationError) {
-      // This can happen if another app grabs the card first
-      console.log("Could not connect to card - in use by another app.");
-    } else {
-      console.log(`Monitor error: ${err.message}`);
-    }
-  });
-
-  devices.on("reader-attached", (reader) => {
-    console.log(`Reader attached: ${reader.name}`);
+    onReaderAttached({ name }) {
+      console.log(`Reader attached: ${name}`);
+    },
   });
 
   console.log("Starting monitor (press Ctrl+C to stop)...\n");
-  devices.start();
+  client.start();
 
   // Stop after 30 seconds for demo purposes
   setTimeout(() => {
     console.log("\nStopping after 30 seconds...");
-    devices.stop();
+    client.stop();
   }, 30000);
 
   process.on("SIGINT", () => {
-    devices.stop();
+    client.stop();
     process.exit(0);
   });
 }

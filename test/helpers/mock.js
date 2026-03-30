@@ -2,10 +2,11 @@
  * Mock PC/SC implementation for testing without hardware
  */
 
-import { Devices } from "../../lib/devices.js";
+import { createClient } from "../../lib/client.js";
 
 /** @typedef {import('../../lib/types.js').Card} Card */
 /** @typedef {import('../../lib/types.js').CardStatus} CardStatus */
+/** @typedef {import('../../lib/types.js').ClientOptions} ClientOptions */
 /** @typedef {import('../../lib/types.js').Context} Context */
 /** @typedef {import('../../lib/types.js').MonitorEvent} MonitorEvent */
 /** @typedef {import('../../lib/types.js').Reader} Reader */
@@ -146,7 +147,6 @@ class MockReader {
     this.name = name;
     this._card = card;
     this._state = card ? 0x122 : 0x12;
-    this._connectAttempts = 0;
   }
 
   get state() {
@@ -157,17 +157,12 @@ class MockReader {
     return this._card ? this._card.atr : null;
   }
 
-  get connectAttempts() {
-    return this._connectAttempts;
-  }
-
   /**
    * @param {number} [_shareMode]
    * @param {number} [_protocol]
    * @returns {Promise<MockCard>}
    */
   async connect(_shareMode, _protocol) {
-    this._connectAttempts++;
     if (!this._card) {
       throw new Error("No card in reader");
     }
@@ -315,27 +310,24 @@ class MockReaderMonitor {
 }
 
 /**
- * Create a mock-enabled Devices class
- * @param {{Context: new () => MockContext, ReaderMonitor: new () => MockReaderMonitor}} mockAddon
- * @returns {typeof Devices}
+ * Create mock DI options for createClient.
+ * @param {MockContext} context
+ * @param {MockReaderMonitor} monitor
+ * @returns {Partial<ClientOptions>}
  */
-function createMockDevices(mockAddon) {
-  const { Context, ReaderMonitor } = mockAddon;
-
-  class MockDevices extends Devices {
-    constructor() {
-      super({
-        Context,
-        ReaderMonitor,
-        SCARD_STATE_PRESENT: 0x20,
-        SCARD_SHARE_SHARED: 2,
-        SCARD_PROTOCOL_T0: 1,
-        SCARD_PROTOCOL_T1: 2,
-      });
-    }
-  }
-
-  return MockDevices;
+function createMockOptions(context, monitor) {
+  return {
+    Context: function () {
+      return context;
+    },
+    ReaderMonitor: function () {
+      return monitor;
+    },
+    SCARD_STATE_PRESENT: 0x20,
+    SCARD_SHARE_SHARED: 2,
+    SCARD_PROTOCOL_T0: 1,
+    SCARD_PROTOCOL_T1: 2,
+  };
 }
 
 const SCARD_PROTOCOL_T0 = 1;
@@ -351,7 +343,8 @@ const SCARD_PROTOCOL_T1 = 2;
  */
 
 /**
- * Create a complete test setup with mock devices, context, monitor, reader, and card.
+ * Create a complete test setup with mock context, monitor, reader, and card.
+ * Returns a factory function to create clients with pre-configured mock DI.
  * @param {TestSetupOptions} [options]
  */
 function createTestSetup(options = {}) {
@@ -371,55 +364,20 @@ function createTestSetup(options = {}) {
   context.addReader(reader);
   monitor.attachReader(reader);
 
-  const MockDevicesClass = createMockDevices({
-    Context: function () {
-      return context;
-    },
-    ReaderMonitor: function () {
-      return monitor;
-    },
-  });
+  const mockOptions = createMockOptions(context, monitor);
 
-  const devices = new MockDevicesClass();
-
-  return { devices, context, monitor, reader, card };
-}
-
-/**
- * A mock reader that fails with "unresponsive" error on dual protocol (T0|T1)
- * but succeeds when connecting with T0 only (simulates issue #34 fallback)
- */
-class UnresponsiveDualProtocolReader extends MockReader {
-  async connect(_shareMode, protocol) {
-    this._connectAttempts++;
-    if (!this._card) {
-      throw new Error("No card in reader");
-    }
-    if (protocol === (SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1)) {
-      throw new Error("Card is unresponsive");
-    }
-    return this._card;
-  }
-}
-
-/**
- * A mock reader that always fails to connect
- */
-class FailingMockReader extends MockReader {
   /**
-   * @param {string} name
-   * @param {MockCard | null} [card]
-   * @param {string} [errorMessage]
+   * Create a client with pre-configured mock DI.
+   * @param {Partial<ClientOptions>} [clientOptions]
    */
-  constructor(name, card = null, errorMessage = "Connection failed") {
-    super(name, card);
-    this._errorMessage = errorMessage;
+  function client(clientOptions = {}) {
+    return createClient({
+      ...mockOptions,
+      ...clientOptions,
+    });
   }
 
-  async connect(_shareMode, _protocol) {
-    this._connectAttempts++;
-    throw new Error(this._errorMessage);
-  }
+  return { client, context, monitor, reader, card };
 }
 
 export {
@@ -427,10 +385,8 @@ export {
   MockReader,
   MockContext,
   MockReaderMonitor,
-  createMockDevices,
+  createMockOptions,
   createTestSetup,
-  UnresponsiveDualProtocolReader,
-  FailingMockReader,
   SCARD_PROTOCOL_T0,
   SCARD_PROTOCOL_T1,
 };

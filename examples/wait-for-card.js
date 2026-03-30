@@ -9,7 +9,7 @@
  *   node wait-for-card.js 30     # Wait up to 30 seconds
  *
  * This demonstrates the polling-based approach using Context.waitForChange()
- * as an alternative to the event-driven Devices API.
+ * as an alternative to the callback-driven createClient API.
  */
 
 import {

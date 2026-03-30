@@ -141,7 +141,7 @@ void ReaderMonitor::MonitorLoop() {
     // Get initial reader list
     UpdateReaderList();
 
-    // Emit reader-attached events for all pre-existing readers (Issue #30)
+    // Emit reader-attached events for all pre-existing readers
     {
         std::lock_guard<std::mutex> lock(mutex_);
         for (const auto& pair : readerStates_) {
@@ -155,7 +155,7 @@ void ReaderMonitor::MonitorLoop() {
     int iterationCount = 0;
 
     while (running_) {
-        // Periodic full state refresh to handle Windows PC/SC state drift (Issue #111)
+        // Periodic full state refresh to handle Windows PC/SC state drift
         // This ensures we don't miss events if the state tracking gets out of sync
         if (++iterationCount >= STATE_REFRESH_INTERVAL) {
             iterationCount = 0;
@@ -245,10 +245,11 @@ void ReaderMonitor::MonitorLoop() {
         }
 
         if (result == static_cast<LONG>(SCARD_E_TIMEOUT)) {
-            // Timeout - query fresh state to detect missed events (Issue #111)
+            // Timeout - query fresh state to detect missed events
             // On Windows, dwEventState after timeout may just mirror dwCurrentState
             // rather than reflecting actual hardware state. We must explicitly
             // query with SCARD_STATE_UNAWARE to get the real current state.
+            // https://github.com/tomkp/smartcard/issues/111
             std::lock_guard<std::mutex> lock(mutex_);
 
             if (readerStates_.empty()) {
@@ -310,7 +311,6 @@ void ReaderMonitor::MonitorLoop() {
             continue;
         }
 
-        // Process changes - use reader name for lookup (Issue #111 fix)
         std::lock_guard<std::mutex> lock(mutex_);
         bool pnpTriggered = false;
 
@@ -384,7 +384,6 @@ void ReaderMonitor::MonitorLoop() {
                 continue;
             }
 
-            // Reader state change - look up by name, not index (Issue #111 fix)
             const std::string& readerName = readerNames[i];
             auto it = readerStates_.find(readerName);
 
@@ -465,7 +464,7 @@ void ReaderMonitor::UpdateReaderList() {
         stateResult = SCardGetStatusChange(context_, 0, states.data(), states.size());
     }
 
-    // Update reader states map (Issue #111 fix: use map keyed by name)
+    // Update reader states map
     std::unordered_map<std::string, ReaderInfo> updatedStates;
     for (size_t i = 0; i < newNames.size(); i++) {
         const std::string& name = newNames[i];

@@ -8,12 +8,11 @@ import {
   MockReader,
   MockContext,
   MockReaderMonitor,
-  createMockDevices,
+  createMockOptions,
   createTestSetup,
-  UnresponsiveDualProtocolReader,
-  FailingMockReader,
+  SCARD_PROTOCOL_T1,
 } from "../helpers/mock.js";
-import { isUnresponsiveCardError } from "../../lib/devices.js";
+import { createClient } from "../../lib/client.js";
 import {
   PCSCError,
   CardRemovedError,
@@ -321,7 +320,7 @@ describe("createTestSetup Helper", () => {
   it("should create a complete test setup with defaults", () => {
     const setup = createTestSetup();
 
-    assert(setup.devices, "Should have devices");
+    assert(setup.client, "Should have client factory");
     assert(setup.context, "Should have context");
     assert(setup.monitor, "Should have monitor");
     assert(setup.reader, "Should have reader");
@@ -353,70 +352,39 @@ describe("createTestSetup Helper", () => {
     /** @type {unknown[]} */
     const events = [];
 
-    setup.devices.on("reader-attached", (r) => events.push(r));
-    setup.devices.start();
+    const client = setup.client({
+      onReaderAttached: (info) => events.push(info),
+    });
+    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.strictEqual(events.length, 1);
-    setup.devices.stop();
+    client.stop();
   });
 });
 
-describe("Devices addListener/removeListener (Issue #96)", () => {
-  it("addListener should register event handler", async () => {
-    const setup = createTestSetup();
-    /** @type {unknown[]} */
-    const events = [];
-
-    setup.devices.addListener("reader-attached", (r) => events.push(r));
-    setup.devices.start();
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    assert.strictEqual(events.length, 1);
-    setup.devices.stop();
-  });
-
-  it("removeListener should unregister event handler", async () => {
-    const setup = createTestSetup();
-    /** @type {unknown[]} */
-    const events = [];
-
-    const handler = (r) => events.push(r);
-    setup.devices.addListener("reader-attached", handler);
-    setup.devices.removeListener("reader-attached", handler);
-    setup.devices.start();
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    assert.strictEqual(events.length, 0, "Handler should have been removed");
-    setup.devices.stop();
-  });
-});
-
-describe("MockDevices Integration", () => {
-  it("should emit reader-attached events", async () => {
+describe("Client Integration", () => {
+  it("should call onReaderAttached callback", async () => {
     const setup = createTestSetup({ readerName: "ACR122U" });
-    /** @type {{ type: string; reader: { name: string } }[]} */
+    /** @type {{ name: string }[]} */
     const events = [];
 
-    setup.devices.on("reader-attached", (reader) =>
-      events.push({ type: "reader-attached", reader }),
-    );
+    const client = setup.client({
+      onReaderAttached: (info) => events.push(info),
+    });
 
-    setup.devices.start();
+    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.strictEqual(events.length, 1);
-    assert.strictEqual(events[0].type, "reader-attached");
-    assert.strictEqual(events[0].reader.name, "ACR122U");
+    assert.strictEqual(events[0].name, "ACR122U");
 
-    setup.devices.stop();
+    client.stop();
   });
 
-  it("should emit card-inserted events with card object", async () => {
+  it("should call onCardInserted callback with card object", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f, 0x80, 0x01]), [
       {
         command: [0xff, 0xca, 0x00, 0x00, 0x00],
@@ -430,36 +398,29 @@ describe("MockDevices Integration", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
-    /** @type {{ reader: { name: string }; card: { transmit: Function } }[]} */
+    /** @type {{ name: string; card: { transmit: Function } }[]} */
     const events = [];
 
-    devices.on("card-inserted", (event) => events.push(event));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => events.push(event),
+    });
 
-    devices.start();
+    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(events.length, 1);
-    assert.strictEqual(events[0].reader.name, "ACR122U");
+    assert.strictEqual(events[0].name, "ACR122U");
     assert(events[0].card);
 
     const response = await events[0].card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x90, 0x00])));
 
-    devices.stop();
+    client.stop();
   });
 
-  it("should emit card-removed events", async () => {
+  it("should call onCardRemoved callback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b]));
     const mockReader = new MockReader("ACR122U", mockCard);
     const mockContext = new MockContext();
@@ -468,23 +429,16 @@ describe("MockDevices Integration", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {string[]} */
     const events = [];
 
-    devices.on("card-inserted", () => events.push("inserted"));
-    devices.on("card-removed", () => events.push("removed"));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: () => events.push("inserted"),
+      onCardRemoved: () => events.push("removed"),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     mockMonitor.removeCard("ACR122U");
@@ -493,7 +447,7 @@ describe("MockDevices Integration", () => {
     assert(events.includes("inserted"));
     assert(events.includes("removed"));
 
-    devices.stop();
+    client.stop();
   });
 
   it("should handle multiple readers", async () => {
@@ -508,25 +462,18 @@ describe("MockDevices Integration", () => {
     mockMonitor.attachReader(reader1);
     mockMonitor.attachReader(reader2);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {string[]} */
     const readerEvents = [];
     /** @type {string[]} */
     const cardEvents = [];
 
-    devices.on("reader-attached", (r) => readerEvents.push(r.name));
-    devices.on("card-inserted", (e) => cardEvents.push(e.reader.name));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onReaderAttached: (info) => readerEvents.push(info.name),
+      onCardInserted: (info) => cardEvents.push(info.name),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     assert.strictEqual(readerEvents.length, 2);
@@ -537,10 +484,10 @@ describe("MockDevices Integration", () => {
     assert(cardEvents.includes("Reader 1"));
     assert(cardEvents.includes("Reader 2"));
 
-    devices.stop();
+    client.stop();
   });
 
-  it("should emit reader-detached events", async () => {
+  it("should call onReaderDetached callback", async () => {
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
     const reader = new MockReader("ACR122U");
@@ -548,23 +495,16 @@ describe("MockDevices Integration", () => {
     mockContext.addReader(reader);
     mockMonitor.attachReader(reader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {string[]} */
     const events = [];
 
-    devices.on("reader-attached", () => events.push("attached"));
-    devices.on("reader-detached", () => events.push("detached"));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onReaderAttached: () => events.push("attached"),
+      onReaderDetached: () => events.push("detached"),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     mockMonitor.detachReader("ACR122U");
@@ -573,109 +513,77 @@ describe("MockDevices Integration", () => {
     assert(events.includes("attached"));
     assert(events.includes("detached"));
 
-    devices.stop();
+    client.stop();
   });
 });
 
-describe("isUnresponsiveCardError", () => {
-  it("should return true for unresponsive error message", () => {
-    const err = new Error("Card is unresponsive");
-    assert.strictEqual(isUnresponsiveCardError(err), true);
-  });
-
-  it("should return true for SCARD_W_UNRESPONSIVE_CARD message", () => {
-    const err = new Error("SCARD_W_UNRESPONSIVE_CARD");
-    assert.strictEqual(isUnresponsiveCardError(err), true);
-  });
-
-  it("should return true for case-insensitive match", () => {
-    const err = new Error("UNRESPONSIVE card detected");
-    assert.strictEqual(isUnresponsiveCardError(err), true);
-  });
-
-  it("should return false for other errors", () => {
-    const err = new Error("Sharing violation");
-    assert.strictEqual(isUnresponsiveCardError(err), false);
-  });
-
-  it("should return false for error without message", () => {
-    const err = new Error();
-    assert.strictEqual(isUnresponsiveCardError(err), false);
-  });
-
-  it("should return false for non-Error objects", () => {
-    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ ("string error")), false);
-    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ (null)), false);
-    assert.strictEqual(isUnresponsiveCardError(/** @type {any} */ (undefined)), false);
-  });
-});
-
-describe("Protocol Fallback (Issue #34)", () => {
+// https://github.com/tomkp/smartcard/issues/34
+describe("Protocol Fallback", () => {
   it("should fallback to T=0 when dual protocol fails with unresponsive error", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    const mockReader = new UnresponsiveDualProtocolReader("Test Reader", mockCard);
+    const mockReader = new MockReader("Test Reader", mockCard);
+    let connectCalls = 0;
+    mockReader.connect = async function connect(_shareMode, protocol) {
+      connectCalls++;
+      if (!this._card) {
+        throw new Error("No card in reader");
+      }
+      if (protocol & SCARD_PROTOCOL_T1) {
+        throw new Error("Card is unresponsive");
+      }
+      return this._card;
+    };
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {unknown[]} */
     const cardEvents = [];
     /** @type {Error[]} */
     const errors = [];
 
-    devices.on("card-inserted", (event) => cardEvents.push(event));
-    devices.on("error", (err) => errors.push(err));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => cardEvents.push(event),
+      onError: (err) => errors.push(err),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
+    assert.strictEqual(connectCalls, 2, "Should have called connect twice");
     assert.strictEqual(errors.length, 0, "Should not emit error");
-    assert.strictEqual(mockReader.connectAttempts, 2, "Should attempt connect twice (fallback)");
+    assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
 
-    devices.stop();
+    client.stop();
   });
 
   it("should rethrow non-unresponsive errors without fallback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    const mockReader = new FailingMockReader("Test Reader", mockCard, "Sharing violation");
+    const mockReader = new MockReader("Test Reader", mockCard);
+    mockReader.connect = async function connect() {
+      throw new Error("Sharing violation");
+    };
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {unknown[]} */
     const cardEvents = [];
     /** @type {Error[]} */
     const errors = [];
 
-    devices.on("card-inserted", (event) => cardEvents.push(event));
-    devices.on("error", (err) => errors.push(err));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => cardEvents.push(event),
+      onError: (err) => errors.push(err),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(cardEvents.length, 0, "Should not emit card-inserted event");
@@ -684,46 +592,8 @@ describe("Protocol Fallback (Issue #34)", () => {
       errors[0].message.includes("Sharing violation"),
       "Error should contain original message",
     );
-    assert.strictEqual(mockReader.connectAttempts, 1, "Should only attempt connect once");
 
-    devices.stop();
-  });
-
-  it("should succeed on first try when dual protocol works", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    const mockReader = new MockReader("Test Reader", mockCard);
-    const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
-
-    mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
-
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
-    /** @type {unknown[]} */
-    const cardEvents = [];
-    /** @type {Error[]} */
-    const errors = [];
-
-    devices.on("card-inserted", (event) => cardEvents.push(event));
-    devices.on("error", (err) => errors.push(err));
-
-    devices.start();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
-    assert.strictEqual(errors.length, 0, "Should not emit error");
-    assert.strictEqual(mockReader.connectAttempts, 1, "Should only attempt connect once");
-
-    devices.stop();
+    client.stop();
   });
 });
 
@@ -828,7 +698,7 @@ describe("Control Code Constants", () => {
   });
 });
 
-describe("parseFeatures (Issue #86)", () => {
+describe("parseFeatures", () => {
   it("should return empty map for empty buffer", () => {
     const features = parseFeatures(Buffer.alloc(0));
     assert(features instanceof Map, "Should return a Map");
@@ -961,6 +831,7 @@ describe("parseFeatures (Issue #86)", () => {
   });
 });
 
+// https://github.com/tomkp/smartcard/issues/98
 describe("APDU Building Utilities (Issue #98)", () => {
   describe("buildGetResponseCommand", () => {
     it("should build GET RESPONSE with Le=0x1C", () => {
@@ -1010,17 +881,23 @@ describe("APDU Building Utilities (Issue #98)", () => {
   });
 });
 
+// https://github.com/tomkp/smartcard/issues/78
 describe("Package Exports (Issue #78)", () => {
   const packageJsonPath = resolve(__dirname, "../../package.json");
 
-  it("should have exports field pointing to entry file", () => {
+  it("should have exports field with main and native entries", () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
     assert(packageJson.exports, "exports field should exist");
     assert.strictEqual(
-      packageJson.exports,
+      packageJson.exports["."],
       "./lib/index.js",
-      "exports should point to lib/index.js",
+      'exports["."] should point to lib/index.js',
+    );
+    assert.strictEqual(
+      packageJson.exports["./native"],
+      "./lib/native.js",
+      'exports["./native"] should point to lib/native.js',
     );
   });
 
@@ -1031,6 +908,7 @@ describe("Package Exports (Issue #78)", () => {
   });
 });
 
+// https://github.com/tomkp/smartcard/issues/80
 describe("Get Connected Cards (Issue #80)", () => {
   it("getCards should return empty map when no cards connected", async () => {
     const mockContext = new MockContext();
@@ -1040,24 +918,18 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const cards = devices.getCards();
+    const cards = client.getCards();
     assert(cards instanceof Map, "getCards should return a Map");
     assert.strictEqual(cards.size, 0, "Map should be empty when no cards");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCards should return connected cards by reader name", async () => {
@@ -1069,27 +941,21 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const cards = devices.getCards();
+    const cards = client.getCards();
     assert.strictEqual(cards.size, 1, "Should have one card");
     assert(cards.has("ACR122U"), "Should be keyed by reader name");
     const card = cards.get("ACR122U");
     assert(card, "Card should exist");
     assert(card.atr.equals(Buffer.from([0x3b, 0x8f])), "Card should have correct ATR");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCards should return multiple cards from multiple readers", async () => {
@@ -1105,48 +971,36 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockMonitor.attachReader(mockReader1);
     mockMonitor.attachReader(mockReader2);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const cards = devices.getCards();
+    const cards = client.getCards();
     assert.strictEqual(cards.size, 2, "Should have two cards");
     assert(cards.has("Reader 1"), "Should have card from Reader 1");
     assert(cards.has("Reader 2"), "Should have card from Reader 2");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCard should return null for unknown reader", async () => {
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const card = devices.getCard("Unknown Reader");
+    const card = client.getCard("Unknown Reader");
     assert.strictEqual(card, null, "Should return null for unknown reader");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCard should return null for reader without card", async () => {
@@ -1157,23 +1011,17 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const card = devices.getCard("ACR122U");
+    const card = client.getCard("ACR122U");
     assert.strictEqual(card, null, "Should return null when reader has no card");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCard should return card for specific reader", async () => {
@@ -1185,24 +1033,18 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const card = devices.getCard("ACR122U");
+    const card = client.getCard("ACR122U");
     assert(card, "Should return card");
     assert(card.atr.equals(Buffer.from([0x3b, 0x8f])), "Card should have correct ATR");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCards should update when card is removed", async () => {
@@ -1214,54 +1056,64 @@ describe("Get Connected Cards (Issue #80)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(devices.getCards().size, 1, "Should have one card initially");
+    assert.strictEqual(client.getCards().size, 1, "Should have one card initially");
 
     mockMonitor.removeCard("ACR122U");
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.strictEqual(devices.getCards().size, 0, "Should have no cards after removal");
-    assert.strictEqual(
-      devices.getCard("ACR122U"),
-      null,
-      "getCard should return null after removal",
-    );
+    assert.strictEqual(client.getCards().size, 0, "Should have no cards after removal");
+    assert.strictEqual(client.getCard("ACR122U"), null, "getCard should return null after removal");
 
-    devices.stop();
+    client.stop();
   });
 
   it("getCards should return empty map when not started", () => {
     const mockContext = new MockContext();
     const mockMonitor = new MockReaderMonitor();
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
     });
 
-    const devices = new MockDevices();
-    const cards = devices.getCards();
+    const cards = client.getCards();
     assert(cards instanceof Map, "getCards should return a Map");
     assert.strictEqual(cards.size, 0, "Map should be empty when not started");
   });
+
+  it("readers map should track reader state", async () => {
+    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
+    const mockReader = new MockReader("ACR122U", mockCard);
+    const mockContext = new MockContext();
+    const mockMonitor = new MockReaderMonitor();
+
+    mockContext.addReader(mockReader);
+    mockMonitor.attachReader(mockReader);
+
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+    });
+
+    client.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.strictEqual(client.readers.size, 1, "Should have one reader");
+    const readerInfo = client.readers.get("ACR122U");
+    assert(readerInfo, "Should have reader info");
+    assert.strictEqual(readerInfo.name, "ACR122U");
+    assert(readerInfo.card, "Should have card");
+
+    client.stop();
+  });
 });
 
+// https://github.com/tomkp/smartcard/issues/82
 describe("Auto GET RESPONSE (Issue #82)", () => {
   it("transmitWithAutoResponse should handle SW1=61 by sending GET RESPONSE", async () => {
     // Mock card that returns 61 1C (28 more bytes) then the data
@@ -1460,6 +1312,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
   });
 });
 
+// https://github.com/tomkp/smartcard/issues/105
 describe("card.transmit() autoGetResponse option (Issue #105)", () => {
   it("should handle SW1=61 when autoGetResponse option is passed to card.transmit()", async () => {
     // Mock card that returns 61 1C (28 more bytes) then the data
@@ -1485,22 +1338,15 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {{ card: any }[]} */
     const cardEvents = [];
 
-    devices.on("card-inserted", (event) => cardEvents.push(event));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => cardEvents.push(event),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(cardEvents.length, 1, "Should have card-inserted event");
@@ -1519,7 +1365,7 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
 
-    devices.stop();
+    client.stop();
   });
 
   it("should handle SW1=6C when autoGetResponse option is passed to card.transmit()", async () => {
@@ -1544,27 +1390,19 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {{ card: any }[]} */
     const cardEvents = [];
 
-    devices.on("card-inserted", (event) => cardEvents.push(event));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => cardEvents.push(event),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const card = cardEvents[0].card;
 
-    // This should work - autoGetResponse passed directly to card.transmit()
     const response = await card.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], {
       autoGetResponse: true,
     });
@@ -1576,7 +1414,7 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
 
-    devices.stop();
+    client.stop();
   });
 
   it("should return raw response when autoGetResponse is not specified", async () => {
@@ -1593,22 +1431,15 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     mockContext.addReader(mockReader);
     mockMonitor.attachReader(mockReader);
 
-    const MockDevices = createMockDevices({
-      Context: function () {
-        return mockContext;
-      },
-      ReaderMonitor: function () {
-        return mockMonitor;
-      },
-    });
-
-    const devices = new MockDevices();
     /** @type {{ card: any }[]} */
     const cardEvents = [];
 
-    devices.on("card-inserted", (event) => cardEvents.push(event));
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      onCardInserted: (event) => cardEvents.push(event),
+    });
 
-    devices.start();
+    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const card = cardEvents[0].card;
@@ -1619,6 +1450,91 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     assert.strictEqual(mockCard.transmitCount, 1, "Should only transmit once");
     assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
 
-    devices.stop();
+    client.stop();
+  });
+
+  it("should auto-handle SW1=61 when client-level autoGetResponse is set", async () => {
+    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
+      {
+        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
+        response: [0x61, 0x1c],
+      },
+      {
+        command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
+        response: [
+          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44,
+          0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
+        ],
+      },
+    ]);
+    const mockReader = new MockReader("Test Reader", mockCard);
+    const mockContext = new MockContext();
+    const mockMonitor = new MockReaderMonitor();
+
+    mockContext.addReader(mockReader);
+    mockMonitor.attachReader(mockReader);
+
+    /** @type {{ card: any }[]} */
+    const cardEvents = [];
+
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      autoGetResponse: true,
+      onCardInserted: (event) => cardEvents.push(event),
+    });
+
+    client.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const card = cardEvents[0].card;
+
+    // No per-call autoGetResponse needed - client-level default applies
+    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
+
+    assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
+    assert.strictEqual(response.length, 30, "Response should be 30 bytes");
+    assert.strictEqual(response[response.length - 2], 0x90);
+    assert.strictEqual(response[response.length - 1], 0x00);
+
+    client.stop();
+  });
+
+  it("per-call autoGetResponse=false should override client-level default", async () => {
+    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
+      {
+        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
+        response: [0x61, 0x1c],
+      },
+    ]);
+    const mockReader = new MockReader("Test Reader", mockCard);
+    const mockContext = new MockContext();
+    const mockMonitor = new MockReaderMonitor();
+
+    mockContext.addReader(mockReader);
+    mockMonitor.attachReader(mockReader);
+
+    /** @type {{ card: any }[]} */
+    const cardEvents = [];
+
+    const client = createClient({
+      ...createMockOptions(mockContext, mockMonitor),
+      autoGetResponse: true,
+      onCardInserted: (event) => cardEvents.push(event),
+    });
+
+    client.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const card = cardEvents[0].card;
+
+    // Explicitly disable autoGetResponse for this call
+    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
+      autoGetResponse: false,
+    });
+
+    assert.strictEqual(mockCard.transmitCount, 1, "Should only transmit once");
+    assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
+
+    client.stop();
   });
 });

@@ -34,7 +34,7 @@ node examples/read-card.js 1        # Use second reader
 
 #### monitor-cards.js
 
-Monitor for card insert/remove events using the high-level Devices API.
+Monitor for card insert/remove events using the createClient API.
 
 ```bash
 node examples/monitor-cards.js
@@ -78,7 +78,7 @@ node examples/wait-for-card.js        # Wait indefinitely
 node examples/wait-for-card.js 30     # Wait up to 30 seconds
 ```
 
-This demonstrates the polling-based approach as an alternative to the event-driven `Devices` API.
+This demonstrates the polling-based approach as an alternative to the callback-driven `createClient` API.
 
 #### control-command.js
 
