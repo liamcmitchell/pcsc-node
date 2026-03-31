@@ -58,10 +58,6 @@ PCSCContext::~PCSCContext() {
     }
 }
 
-// ============================================================================
-// Monitor
-// ============================================================================
-
 Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
@@ -126,10 +122,6 @@ void PCSCContext::StopMonitorInternal() {
     readerStates_.clear();
 }
 
-// ============================================================================
-// Close
-// ============================================================================
-
 Napi::Value PCSCContext::Close(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
@@ -147,10 +139,6 @@ Napi::Value PCSCContext::Close(const Napi::CallbackInfo& info) {
 Napi::Value PCSCContext::GetIsValid(const Napi::CallbackInfo& info) {
     return Napi::Boolean::New(info.Env(), valid_);
 }
-
-// ============================================================================
-// Monitor Loop (runs on background thread)
-// ============================================================================
 
 void PCSCContext::MonitorLoop() {
     // Get initial reader list
