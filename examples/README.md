@@ -1,169 +1,100 @@
 # Examples
 
-Ready-to-run examples for smartcard.
+Ready-to-run scripts for the current Context/Reader API.
 
 ## Prerequisites
 
-Make sure you have built the library first:
+Build/install dependencies first:
 
 ```bash
 cd ..
 npm install
 ```
 
-## Examples
+## Basic
 
-### Basic Examples
+### list-readers.js
 
-#### list-readers.js
-
-List all available PC/SC readers and their status.
+List attached readers and current card state.
 
 ```bash
 node examples/list-readers.js
 ```
 
-#### read-card.js
+### monitor-cards.js
 
-Connect to a card and read its UID and ATR.
-
-```bash
-node examples/read-card.js          # Use first reader
-node examples/read-card.js 1        # Use second reader
-```
-
-#### monitor-cards.js
-
-Monitor for card insert/remove events using the createClient API.
+Monitor reader/card lifecycle events.
 
 ```bash
 node examples/monitor-cards.js
-# Press Ctrl+C to stop
 ```
 
-#### send-apdu.js
+### read-card.js
 
-Send a custom APDU command to a card.
+Wait for a card in a reader and read ATR + UID.
 
 ```bash
-node examples/send-apdu.js "FF CA 00 00 00"      # Get UID (contactless)
-node examples/send-apdu.js "00 A4 04 00"         # Select command
-node examples/send-apdu.js "00 B0 00 00 10"      # Read 16 bytes
+node examples/read-card.js
+node examples/read-card.js "ACS ACR122U PICC Interface 00 00"
 ```
 
-### Advanced Examples
+### send-apdu.js
 
-#### error-handling.js
+Send a custom APDU to a detected card.
 
-Demonstrates proper error handling with specific PC/SC error types.
+```bash
+node examples/send-apdu.js "FF CA 00 00 00"
+node examples/send-apdu.js "00 A4 04 00" "ACS ACR122U PICC Interface 00 00"
+```
+
+## Advanced
+
+### wait-for-card.js
+
+Wait for card insertion using Context `insert` events.
+
+```bash
+node examples/wait-for-card.js
+node examples/wait-for-card.js 30
+```
+
+### control-command.js
+
+Send a reader control command with common PC/SC control-code fallbacks.
+
+```bash
+node examples/control-command.js "FF 00 40 00 04 D4 4A 01 00"
+node examples/control-command.js "FF 00 40 00 04 D4 4A 01 00" "ACS ACR122U PICC Interface 00 00"
+```
+
+### reconnect.js
+
+Demonstrate `reader.reconnect()` for reset/protocol/share-mode changes.
+
+```bash
+node examples/reconnect.js
+node examples/reconnect.js "ACS ACR122U PICC Interface 00 00"
+```
+
+### mifare-read-write.js
+
+Authenticate, read, write, verify, and restore a MIFARE Classic block.
+
+```bash
+node examples/mifare-read-write.js
+node examples/mifare-read-write.js "ACS ACR122U PICC Interface 00 00"
+```
+
+### error-handling.js
+
+Demonstrates error handling patterns for operation, monitoring, and retry logic.
 
 ```bash
 node examples/error-handling.js
 ```
 
-Shows how to catch and handle:
+## Notes
 
-- `CardRemovedError` - Card removed during operation
-- `TimeoutError` - Operation timed out
-- `NoReadersError` - No readers available
-- `ServiceNotRunningError` - PC/SC daemon not running
-- `SharingViolationError` - Card in use by another app
-
-#### wait-for-card.js
-
-Wait for a card using the low-level `Context.waitForChange()` API.
-
-```bash
-node examples/wait-for-card.js        # Wait indefinitely
-node examples/wait-for-card.js 30     # Wait up to 30 seconds
-```
-
-This demonstrates the polling-based approach as an alternative to the callback-driven `createClient` API.
-
-#### control-command.js
-
-Send control commands to readers for advanced features.
-
-```bash
-node examples/control-command.js
-```
-
-Demonstrates:
-
-- Using `card.control()` to send control commands
-- Querying reader features with `CM_IOCTL_GET_FEATURE_REQUEST`
-- Using `parseFeatures()` to decode TLV responses
-- Platform-specific codes with `SCARD_CTL_CODE()`
-
-#### reconnect.js
-
-Reset or change protocols on a connected card.
-
-```bash
-node examples/reconnect.js
-```
-
-Demonstrates:
-
-- `card.reconnect()` with different initialization modes
-- Switching between T=0 and T=1 protocols
-- Upgrading to exclusive access
-- Warm reset vs cold reset (unpower)
-
-#### mifare-read-write.js
-
-Read and write MIFARE Classic cards (1K/4K).
-
-```bash
-node examples/mifare-read-write.js read            # Read block 4
-node examples/mifare-read-write.js read 8          # Read block 8
-node examples/mifare-read-write.js write 4 "00112233445566778899AABBCCDDEEFF"
-node examples/mifare-read-write.js dump            # Dump all readable blocks
-```
-
-**Warning**: Be careful when writing! Writing to sector trailers (blocks 3, 7, 11, ...) can permanently lock sectors.
-
-## Common APDU Commands
-
-| Command       | APDU                      | Description                          |
-| ------------- | ------------------------- | ------------------------------------ |
-| Get UID       | `FF CA 00 00 00`          | Get card UID (contactless via PC/SC) |
-| Get ATS       | `FF CA 01 00 00`          | Get ATS (contactless)                |
-| Select by AID | `00 A4 04 00 <len> <AID>` | Select application by AID            |
-| Read Binary   | `00 B0 <P1> <P2> <Le>`    | Read data from file                  |
-| Get Challenge | `00 84 00 00 08`          | Get 8-byte random challenge          |
-
-## MIFARE Classic Commands (via PC/SC)
-
-| Command      | APDU                                         | Description                    |
-| ------------ | -------------------------------------------- | ------------------------------ |
-| Load Key     | `FF 82 00 <slot> 06 <key>`                   | Load 6-byte key into reader    |
-| Authenticate | `FF 86 00 00 05 01 00 <block> <type> <slot>` | Auth with key A (60) or B (61) |
-| Read Block   | `FF B0 00 <block> 10`                        | Read 16 bytes                  |
-| Write Block  | `FF D6 00 <block> 10 <data>`                 | Write 16 bytes                 |
-
-## Response Status Words
-
-| SW   | Meaning                               |
-| ---- | ------------------------------------- |
-| 9000 | Success                               |
-| 61XX | XX bytes available (use GET RESPONSE) |
-| 6CXX | Wrong Le, retry with Le=XX            |
-| 6300 | Authentication failed                 |
-| 6A82 | File not found                        |
-| 6A86 | Incorrect P1-P2                       |
-| 6D00 | Instruction not supported             |
-| 6E00 | Class not supported                   |
-
-## Error Classes
-
-```javascript
-const {
-  PCSCError, // Base class with error code
-  CardRemovedError, // Card removed (0x80100069)
-  TimeoutError, // Timeout (0x8010000A)
-  NoReadersError, // No readers (0x8010002E)
-  ServiceNotRunningError, // Service down (0x8010001D)
-  SharingViolationError, // Card in use (0x8010000B)
-} = require("smartcard");
-```
+- APDU status words are the last two bytes (SW1/SW2)
+- Most contactless readers support UID via `FF CA 00 00 00`
+- Some reader control commands are vendor-specific

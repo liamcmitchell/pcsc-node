@@ -2,20 +2,31 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import { createMockNative, responseMap } from "./context.helpers.js";
 import { SCARD_PROTOCOL_T1 } from "../lib/native.js";
-import { createContext } from "../lib/context.js";
+import { Context } from "../lib/context.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function startContext(options = {}) {
+  const ctx = new Context(options);
+  for (const eventName of ["attach", "detach", "change", "insert", "remove", "error"]) {
+    const listener = options[eventName];
+    if (listener) {
+      ctx.on(eventName, listener);
+    }
+  }
+  return ctx.start();
+}
+
 describe("Context Integration", () => {
-  it("should call onReaderAttached callback with reader object", async () => {
+  it("should call attach callback with reader object", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
-    /** @type {import('../lib/context.js').Reader[]} */
+    /** @type {import('../lib/reader.js').Reader[]} */
     const events = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (reader) => events.push(reader),
+      attach: (reader) => events.push(reader),
     });
 
     await delay(0);
@@ -28,7 +39,7 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should call onCardInserted callback with reader object", async () => {
+  it("should call insert callback with reader object", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", {
       atr: Buffer.from([0x3b, 0x8f, 0x80, 0x01]),
@@ -37,12 +48,12 @@ describe("Context Integration", () => {
       ]),
     });
 
-    /** @type {import('../lib/context.js').Reader[]} */
+    /** @type {import('../lib/reader.js').Reader[]} */
     const events = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => events.push(reader),
+      insert: (reader) => events.push(reader),
     });
 
     await delay(0);
@@ -57,17 +68,17 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should call onCardRemoved callback", async () => {
+  it("should call remove callback", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
     /** @type {string[]} */
     const events = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: () => events.push("inserted"),
-      onCardRemoved: () => events.push("removed"),
+      insert: () => events.push("inserted"),
+      remove: () => events.push("removed"),
     });
 
     await delay(0);
@@ -91,10 +102,10 @@ describe("Context Integration", () => {
     /** @type {string[]} */
     const cardEvents = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (reader) => readerEvents.push(reader.name),
-      onCardInserted: (reader) => cardEvents.push(reader.name),
+      attach: (reader) => readerEvents.push(reader.name),
+      insert: (reader) => cardEvents.push(reader.name),
     });
 
     await delay(0);
@@ -110,17 +121,17 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should call onReaderDetached callback", async () => {
+  it("should call detach callback", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
 
     /** @type {string[]} */
     const events = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: () => events.push("attached"),
-      onReaderDetached: () => events.push("detached"),
+      attach: () => events.push("attached"),
+      detach: () => events.push("detached"),
     });
 
     await delay(0);
@@ -139,7 +150,7 @@ describe("Context Integration", () => {
     mock.attachReader("Reader 1");
     mock.attachReader("Reader 2");
 
-    const ctx = createContext({ _nativeContext: mock });
+    const ctx = startContext({ _nativeContext: mock });
 
     await delay(0);
 
@@ -156,12 +167,12 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../lib/context.js').Reader[]} */
+    /** @type {import('../lib/reader.js').Reader[]} */
     const cardEvents = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -174,17 +185,17 @@ describe("Context Integration", () => {
     assert.strictEqual(cardEvents[0].connected, false);
   });
 
-  it("should call onReaderChange for changed events", async () => {
+  it("should call change for changed events", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
 
     /** @type {{ reader: string; prevState: number }[]} */
     const stateChanges = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
       autoConnect: false,
-      onReaderChange: (reader, prevState) => stateChanges.push({ reader: reader.name, prevState }),
+      change: (reader, prevState) => stateChanges.push({ reader: reader.name, prevState }),
     });
 
     await delay(0);
@@ -198,17 +209,17 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should fire onCardInserted but not connect when autoConnect is false", async () => {
+  it("should fire insert but not connect when autoConnect is false", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../lib/context.js').Reader[]} */
+    /** @type {import('../lib/reader.js').Reader[]} */
     const cardEvents = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
       autoConnect: false,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -224,9 +235,9 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]), protocol: SCARD_PROTOCOL_T1 });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -246,9 +257,9 @@ describe("Context Integration", () => {
       },
     });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -263,9 +274,9 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
     let reader;
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (r) => {
+      attach: (r) => {
         reader = r;
       },
     });
@@ -286,9 +297,9 @@ describe("Context Integration", () => {
       },
     });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -302,9 +313,9 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
     let reader;
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (r) => {
+      attach: (r) => {
         reader = r;
       },
     });
@@ -319,9 +330,9 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
     let reader;
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (r) => {
+      attach: (r) => {
         reader = r;
       },
     });
@@ -332,14 +343,14 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should emit onCardRemoved when reader with connected card is detached", async () => {
+  it("should emit remove when reader with connected card is detached", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
     const events = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardRemoved: () => events.push("removed"),
-      onReaderDetached: () => events.push("detached"),
+      remove: () => events.push("removed"),
+      detach: () => events.push("detached"),
     });
 
     await delay(0);
@@ -351,12 +362,12 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should call onError for error monitor events", async () => {
+  it("should call error for error monitor events", async () => {
     const mock = createMockNative();
     const errors = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onError: (err) => errors.push(err),
+      error: (err) => errors.push(err),
     });
 
     mock.emitError("Something went wrong");
@@ -376,9 +387,9 @@ describe("Context Integration", () => {
       },
     });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -392,13 +403,13 @@ describe("Context Integration", () => {
     mock.close = () => {
       throw new Error("Close failed");
     };
-    const ctx = createContext({ _nativeContext: mock });
+    const ctx = startContext({ _nativeContext: mock });
     assert.doesNotThrow(() => ctx.close());
   });
 
   it("should expose isValid on context", async () => {
     const mock = createMockNative();
-    const ctx = createContext({ _nativeContext: mock });
+    const ctx = startContext({ _nativeContext: mock });
     assert.strictEqual(ctx.isValid, true);
     ctx.close();
     assert.strictEqual(ctx.isValid, false);
@@ -409,7 +420,7 @@ describe("Context Integration", () => {
     mock.stopMonitor = () => {
       throw new Error("Stop failed");
     };
-    const ctx = createContext({ _nativeContext: mock });
+    const ctx = startContext({ _nativeContext: mock });
     assert.doesNotThrow(() => ctx.close());
   });
 
@@ -422,10 +433,10 @@ describe("Context Integration", () => {
       },
     });
     const events = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardRemoved: () => events.push("removed"),
-      onReaderDetached: () => events.push("detached"),
+      remove: () => events.push("removed"),
+      detach: () => events.push("detached"),
     });
 
     await delay(0);
@@ -439,7 +450,7 @@ describe("Context Integration", () => {
 
   it("should ignore changed event for unknown reader", async () => {
     const mock = createMockNative();
-    const ctx = createContext({ _nativeContext: mock });
+    const ctx = startContext({ _nativeContext: mock });
 
     // Emit a changed event for a reader name never attached
     mock.emitChanged("Ghost Reader", 0x02, null);
@@ -453,9 +464,9 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
     let reader;
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onReaderAttached: (r) => {
+      attach: (r) => {
         reader = r;
       },
     });
@@ -475,9 +486,9 @@ describe("Context Integration", () => {
       ]),
     });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -498,9 +509,9 @@ describe("Context Integration", () => {
       },
     });
     const events = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardRemoved: () => events.push("removed"),
+      remove: () => events.push("removed"),
     });
 
     await delay(0);
@@ -528,10 +539,10 @@ describe("Protocol Fallback", () => {
     const cardEvents = [];
     const errors = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
-      onError: (err) => errors.push(err),
+      insert: (reader) => cardEvents.push(reader),
+      error: (err) => errors.push(err),
     });
 
     await delay(0);
@@ -555,10 +566,10 @@ describe("Protocol Fallback", () => {
     const cardEvents = [];
     const errors = [];
 
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
-      onError: (err) => errors.push(err),
+      insert: (reader) => cardEvents.push(reader),
+      error: (err) => errors.push(err),
     });
 
     await delay(0);
@@ -578,7 +589,7 @@ describe("Auto GET RESPONSE", () => {
   /**
    * @param {Array<{command: number[], response: number[]}>} cardResponses
    * @param {number[]} command
-   * @param {import('../lib/context.js').TransmitOptions} [options]
+   * @param {import('../lib/reader.js').TransmitOptions} [options]
    */
   async function transmitViaReader(cardResponses, command, options) {
     const mock = createMockNative();
@@ -587,9 +598,9 @@ describe("Auto GET RESPONSE", () => {
       onTransmit: responseMap(cardResponses),
     });
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
     await delay(0);
     const reader = cardEvents[0];
@@ -744,9 +755,9 @@ describe("reader.transmit() autoGetResponse option", () => {
     });
 
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -783,9 +794,9 @@ describe("reader.transmit() autoGetResponse option", () => {
     });
 
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -812,9 +823,9 @@ describe("reader.transmit() autoGetResponse option", () => {
     });
 
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -846,10 +857,10 @@ describe("reader.transmit() autoGetResponse option", () => {
     });
 
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
       autoGetResponse: true,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);
@@ -875,10 +886,10 @@ describe("reader.transmit() autoGetResponse option", () => {
     });
 
     const cardEvents = [];
-    const ctx = createContext({
+    const ctx = startContext({
       _nativeContext: mock,
       autoGetResponse: true,
-      onCardInserted: (reader) => cardEvents.push(reader),
+      insert: (reader) => cardEvents.push(reader),
     });
 
     await delay(0);

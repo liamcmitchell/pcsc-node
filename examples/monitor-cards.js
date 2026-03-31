@@ -1,28 +1,26 @@
 #!/usr/bin/env node
 /**
- * Monitor for card insert/remove events using the createClient API
+ * Monitor for card insert/remove events using the Context API
  *
  * Usage: node monitor-cards.js
  *
  * Press Ctrl+C to stop monitoring.
  */
 
-import { createContext } from "../lib/index.js";
+import { Context } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
 console.log("==================");
 console.log("Monitoring for card events. Press Ctrl+C to stop.\n");
 
-const context = createContext({
-  onReaderAttached(reader) {
+const context = new Context()
+  .on("attach", (reader) => {
     console.log(`[+] Reader attached: ${reader.name}`);
-  },
-
-  onReaderDetached(reader) {
+  })
+  .on("detach", (reader) => {
     console.log(`[-] Reader detached: ${reader.name}`);
-  },
-
-  async onCardInserted(reader) {
+  })
+  .on("insert", async (reader) => {
     console.log(`\n[*] Card inserted in: ${reader.name}`);
 
     // Get ATR
@@ -46,20 +44,18 @@ const context = createContext({
     }
 
     console.log();
-  },
-
-  onCardRemoved(reader) {
+  })
+  .on("remove", (reader) => {
     console.log(`[*] Card removed from: ${reader.name}\n`);
-  },
-
-  onError(err) {
+  })
+  .on("error", (err) => {
     // Ignore common transient errors
     const ignorable = ["unresponsive", "Sharing violation", "cancelled"];
     if (!ignorable.some((msg) => err.message.includes(msg))) {
       console.error(`[!] Error: ${err.message}`);
     }
-  },
-});
+  })
+  .start();
 
 // Handle shutdown
 process.on("SIGINT", () => {

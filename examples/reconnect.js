@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 /**
- * Demonstrates card.reconnect() for resetting or changing protocols
+ * Demonstrates reader.reconnect() for reset/protocol/share-mode changes.
  *
- * Usage: node reconnect.js
- *
- * The reconnect() method is useful when you need to:
- * - Reset the card to a known state
- * - Change the communication protocol (T=0 <-> T=1)
- * - Recover from errors without releasing the card handle
+ * Usage: node reconnect.js [reader-name]
  */
 
 import {
@@ -19,7 +14,6 @@ import {
   SCARD_LEAVE_CARD,
   SCARD_RESET_CARD,
   SCARD_UNPOWER_CARD,
-  SCARD_STATE_PRESENT,
 } from "../lib/index.js";
 
 function protocolName(protocol) {
@@ -28,144 +22,92 @@ function protocolName(protocol) {
   return `Unknown (${protocol})`;
 }
 
-async function main() {
-  console.log("Reconnect Example");
-  console.log("=================\n");
+function waitForInsert(ctx, readerName) {
+  const existing = [...ctx.readers.values()].find(
+    (reader) => (!readerName || reader.name === readerName) && reader.connected,
+  );
+  if (existing) return Promise.resolve(existing);
 
+  return new Promise((resolve, reject) => {
+    const onInsert = (reader) => {
+      if (!readerName || reader.name === readerName) {
+        cleanup();
+        resolve(reader);
+      }
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      ctx.off("insert", onInsert);
+      ctx.off("error", onError);
+    };
+
+    ctx.on("insert", onInsert);
+    ctx.on("error", onError);
+  });
+}
+
+async function main() {
+  const readerName = process.argv[2] || undefined;
   const ctx = new Context();
 
   try {
-    const readers = ctx.listReaders();
+    ctx.start();
+    const reader = await waitForInsert(ctx, readerName);
 
-    if (readers.length === 0) {
-      console.log("No readers found.");
-      return;
-    }
-
-    const reader = readers[0];
     console.log(`Reader: ${reader.name}`);
+    console.log(`Protocol: ${protocolName(reader.protocol)}`);
 
-    const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
-    if (!hasCard) {
-      console.log("No card in reader. Please insert a card.");
-      return;
-    }
-
-    // Initial connection
-    console.log("\n--- Initial Connection ---");
-    const card = await ctx.connect(
-      reader.name,
-      SCARD_SHARE_SHARED,
-      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-    );
-
-    let status = card.getStatus();
-    console.log(`Protocol: ${protocolName(card.protocol)}`);
-    console.log(`ATR: ${status.atr.toString("hex")}`);
-
-    // Send a test command
-    try {
-      const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      console.log(`Test command response: ${response.toString("hex")}`);
-    } catch (err) {
-      console.log(`Test command failed: ${err.message}`);
-    }
-
-    // Reconnect with reset
-    console.log("\n--- Reconnect with RESET ---");
-    console.log("Resetting card...");
-
-    const newProtocol = await card.reconnect(
+    await reader.reconnect(
       SCARD_SHARE_SHARED,
       SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
       SCARD_RESET_CARD,
     );
+    console.log(`After reset: ${protocolName(reader.protocol)}`);
 
-    console.log(`New protocol: ${protocolName(newProtocol)}`);
-
-    status = card.getStatus();
-    console.log(`ATR after reset: ${status.atr.toString("hex")}`);
-
-    // The card should be in a fresh state now
     try {
-      const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      console.log(`Command after reset: ${response.toString("hex")}`);
-    } catch (err) {
-      console.log(`Command failed: ${err.message}`);
+      await reader.reconnect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_RESET_CARD);
+      console.log(`T=0 reconnect: ${protocolName(reader.protocol)}`);
+    } catch (error) {
+      console.log(`T=0 not supported: ${error.message}`);
     }
 
-    // Try to force a specific protocol (if supported)
-    console.log("\n--- Reconnect with T=0 only ---");
     try {
-      const t0Protocol = await card.reconnect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0,
-        SCARD_RESET_CARD,
-      );
-      console.log(`Protocol: ${protocolName(t0Protocol)}`);
-    } catch (err) {
-      console.log(`T=0 not supported: ${err.message}`);
+      await reader.reconnect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T1, SCARD_RESET_CARD);
+      console.log(`T=1 reconnect: ${protocolName(reader.protocol)}`);
+    } catch (error) {
+      console.log(`T=1 not supported: ${error.message}`);
     }
 
-    // Try T=1 only
-    console.log("\n--- Reconnect with T=1 only ---");
-    try {
-      const t1Protocol = await card.reconnect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T1,
-        SCARD_RESET_CARD,
-      );
-      console.log(`Protocol: ${protocolName(t1Protocol)}`);
-    } catch (err) {
-      console.log(`T=1 not supported: ${err.message}`);
-    }
-
-    // Reconnect with unpower (cold reset)
-    console.log("\n--- Reconnect with UNPOWER (cold reset) ---");
-    console.log("Power cycling card...");
+    await reader.reconnect(
+      SCARD_SHARE_SHARED,
+      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+      SCARD_UNPOWER_CARD,
+    );
+    console.log(`After power cycle: ${protocolName(reader.protocol)}`);
 
     try {
-      const unpowerProtocol = await card.reconnect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-        SCARD_UNPOWER_CARD,
-      );
-      console.log(`Protocol after power cycle: ${protocolName(unpowerProtocol)}`);
-
-      status = card.getStatus();
-      console.log(`ATR: ${status.atr.toString("hex")}`);
-    } catch (err) {
-      console.log(`Cold reset failed: ${err.message}`);
-    }
-
-    // Upgrade to exclusive mode
-    console.log("\n--- Reconnect with EXCLUSIVE mode ---");
-    try {
-      const exclusiveProtocol = await card.reconnect(
+      await reader.reconnect(
         SCARD_SHARE_EXCLUSIVE,
         SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
         SCARD_LEAVE_CARD,
       );
-      console.log(`Got exclusive access! Protocol: ${protocolName(exclusiveProtocol)}`);
-
-      // Do something that requires exclusive access...
-      console.log("Performing exclusive operation...");
-
-      // Downgrade back to shared mode
-      await card.reconnect(
+      console.log("Exclusive mode acquired.");
+      await reader.reconnect(
         SCARD_SHARE_SHARED,
         SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
         SCARD_LEAVE_CARD,
       );
-      console.log("Released exclusive access.");
-    } catch (err) {
-      console.log(`Exclusive mode failed: ${err.message}`);
+      console.log("Back to shared mode.");
+    } catch (error) {
+      console.log(`Exclusive mode failed: ${error.message}`);
     }
 
-    card.disconnect(SCARD_LEAVE_CARD);
-    console.log("\nDone!");
-  } catch (err) {
-    console.error(`Error: ${err.message}`);
+    reader.disconnect(SCARD_LEAVE_CARD);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
   } finally {
     ctx.close();
   }

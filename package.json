@@ -40,8 +40,7 @@
   "type": "module",
   "main": "lib/index.js",
   "exports": {
-    ".": "./lib/index.js",
-    "./native": "./lib/native.js"
+    ".": "./lib/index.js"
   },
   "scripts": {
     "install": "node-gyp rebuild",

@@ -16,5 +16,11 @@
     "noEmit": true
   },
   "include": ["lib/**/*.js"],
-  "exclude": ["node_modules", "dist", "build", "**/*.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/*.test.js",
+    "**/*.helpers.js"
+  ]
 }

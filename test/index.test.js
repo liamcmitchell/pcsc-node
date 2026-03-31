@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 describe("Package Exports", () => {
   const packageJsonPath = resolve(__dirname, "../package.json");
 
-  it("should have exports field with main and native entries", () => {
+  it("should have exports field with main entry", () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
     assert(packageJson.exports, "exports field should exist");
@@ -18,11 +18,6 @@ describe("Package Exports", () => {
       packageJson.exports["."],
       "./lib/index.js",
       'exports["."] should point to lib/index.js',
-    );
-    assert.strictEqual(
-      packageJson.exports["./native"],
-      "./lib/native.js",
-      'exports["./native"] should point to lib/native.js',
     );
   });
 

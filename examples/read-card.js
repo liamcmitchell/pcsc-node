@@ -1,95 +1,78 @@
 #!/usr/bin/env node
 /**
- * Connect to a card and read its UID and ATR
+ * Wait for a card and read ATR + UID.
  *
- * Usage: node read-card.js [reader-index]
+ * Usage: node read-card.js [reader-name]
  *
- * Examples:
- *   node read-card.js      # Use first reader
- *   node read-card.js 1    # Use second reader
+ * If no reader name is provided, the first reader with an inserted card is used.
  */
 
-import {
-  Context,
-  SCARD_SHARE_SHARED,
-  SCARD_PROTOCOL_T0,
-  SCARD_PROTOCOL_T1,
-  SCARD_LEAVE_CARD,
-  SCARD_STATE_PRESENT,
-} from "../lib/index.js";
+import { Context, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD } from "../lib/index.js";
+
+function waitForInsert(ctx, readerName) {
+  const existing = [...ctx.readers.values()].find(
+    (reader) => (!readerName || reader.name === readerName) && reader.connected,
+  );
+  if (existing) {
+    return Promise.resolve(existing);
+  }
+
+  return new Promise((resolve, reject) => {
+    const onInsert = (reader) => {
+      if (!readerName || reader.name === readerName) {
+        cleanup();
+        resolve(reader);
+      }
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      ctx.off("insert", onInsert);
+      ctx.off("error", onError);
+    };
+
+    ctx.on("insert", onInsert);
+    ctx.on("error", onError);
+  });
+}
 
 async function main() {
-  const readerIndex = parseInt(process.argv[2]) || 0;
-
-  console.log("Creating PC/SC context...");
+  const readerName = process.argv[2] || undefined;
   const ctx = new Context();
 
   try {
-    const readers = ctx.listReaders();
-
-    if (readers.length === 0) {
-      console.log("No readers found.");
-      return;
-    }
-
-    if (readerIndex >= readers.length) {
-      console.log(`Reader index ${readerIndex} out of range. Found ${readers.length} reader(s).`);
-      return;
-    }
-
-    const reader = readers[readerIndex];
-    console.log(`Using reader: ${reader.name}`);
-
-    // Check if card is present
-    const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
-    if (!hasCard) {
-      console.log("\nNo card in reader. Please insert a card and try again.");
-      return;
-    }
-
-    console.log("\nConnecting to card...");
-    const card = await ctx.connect(
-      reader.name,
-      SCARD_SHARE_SHARED,
-      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+    console.log(
+      readerName ? `Waiting for card in reader: ${readerName}` : "Waiting for first card...",
     );
 
-    const protocolName = card.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1";
-    console.log(`Connected! Protocol: ${protocolName}`);
+    ctx.start();
+    const reader = await waitForInsert(ctx, readerName);
 
-    // Get card status
-    const status = card.getStatus();
-    console.log(`\nCard Information:`);
-    console.log(`  ATR: ${status.atr.toString("hex")}`);
+    console.log(`Using reader: ${reader.name}`);
+    console.log(`Connected! Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
 
-    // Try to get UID (works for contactless cards via PC/SC pseudo-APDU)
-    console.log("\nTrying to read UID...");
-    try {
-      const getUidCmd = Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]);
-      const response = await card.transmit(getUidCmd);
-
-      // Response format: UID + SW1 SW2
-      if (response.length >= 2) {
-        const sw1 = response[response.length - 2];
-        const sw2 = response[response.length - 1];
-
-        if (sw1 === 0x90 && sw2 === 0x00) {
-          const uid = response.subarray(0, -2);
-          console.log(`  UID: ${uid.toString("hex")}`);
-        } else {
-          console.log(`  Command returned: ${sw1.toString(16)} ${sw2.toString(16)}`);
-          console.log("  (UID read may not be supported by this card type)");
-        }
-      }
-    } catch (err) {
-      console.log(`  Could not read UID: ${err.message}`);
+    if (reader.atr) {
+      console.log(`ATR: ${reader.atr.toString("hex")}`);
     }
 
-    // Disconnect
-    card.disconnect(SCARD_LEAVE_CARD);
-    console.log("\nDisconnected.");
-  } catch (err) {
-    console.error("Error:", err.message);
+    try {
+      const response = await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
+      const sw1 = response[response.length - 2];
+      const sw2 = response[response.length - 1];
+      if (sw1 === 0x90 && sw2 === 0x00) {
+        console.log(`UID: ${response.subarray(0, -2).toString("hex")}`);
+      } else {
+        console.log(`UID command returned: ${sw1.toString(16)} ${sw2.toString(16)}`);
+      }
+    } catch (error) {
+      console.log(`Could not read UID: ${error.message}`);
+    }
+
+    reader.disconnect(SCARD_LEAVE_CARD);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
   } finally {
     ctx.close();
   }

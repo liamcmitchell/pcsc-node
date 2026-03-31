@@ -5,7 +5,9 @@
  *   const mock = createMockNative();
  *   const nativeReader = mock.attachReader('Reader 1', { atr: Buffer.from([0x3b]) });
  *   nativeReader.onTransmit = responseMap([{ command: [...], response: [...] }]);
- *   const ctx = createContext({ _nativeContext: mock, onCardInserted: ... });
+ *   const ctx = new Context({ _nativeContext: mock })
+ *     .on('insert', (reader) => { ... })
+ *     .start();
  */
 
 /** @typedef {import('../lib/native.js').NativeContext} NativeContext */
