@@ -5,29 +5,6 @@
 #include <string>
 #include "platform/pcsc.h"
 
-// Async worker for SCardGetStatusChange
-class WaitForChangeWorker : public Napi::AsyncWorker {
-public:
-    WaitForChangeWorker(Napi::Env env,
-                        SCARDCONTEXT context,
-                        std::vector<std::string> readerNames,
-                        std::vector<DWORD> currentStates,
-                        DWORD timeout,
-                        Napi::Promise::Deferred deferred);
-
-    void Execute() override;
-    void OnOK() override;
-    void OnError(const Napi::Error& error) override;
-
-private:
-    SCARDCONTEXT context_;
-    std::vector<std::string> readerNames_;
-    std::vector<SCARD_READERSTATE> states_;
-    DWORD timeout_;
-    LONG result_;
-    Napi::Promise::Deferred deferred_;
-};
-
 // Async worker for SCardTransmit
 class TransmitWorker : public Napi::AsyncWorker {
 public:
@@ -83,6 +60,9 @@ public:
                   std::string readerName,
                   DWORD shareMode,
                   DWORD preferredProtocols,
+                  SCARDHANDLE* cardOut,
+                  DWORD* protocolOut,
+                  bool* connectedOut,
                   Napi::Promise::Deferred deferred);
 
     void Execute() override;
@@ -96,6 +76,9 @@ private:
     DWORD preferredProtocols_;
     SCARDHANDLE card_;
     DWORD activeProtocol_;
+    SCARDHANDLE* cardOut_;
+    DWORD* protocolOut_;
+    bool* connectedOut_;
     LONG result_;
     Napi::Promise::Deferred deferred_;
 };

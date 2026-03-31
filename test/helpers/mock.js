@@ -2,13 +2,10 @@
  * Mock PC/SC implementation for testing without hardware
  */
 
-import { createClient } from "../../lib/client.js";
+import { createContext } from "../../lib/context.js";
 
-/** @typedef {import('../../lib/types.js').Card} Card */
 /** @typedef {import('../../lib/types.js').CardStatus} CardStatus */
-/** @typedef {import('../../lib/types.js').ClientOptions} ClientOptions */
-/** @typedef {import('../../lib/types.js').Context} Context */
-/** @typedef {import('../../lib/types.js').MonitorEvent} MonitorEvent */
+/** @typedef {import('../../lib/types.js').ContextOptions} ContextOptions */
 /** @typedef {import('../../lib/types.js').Reader} Reader */
 /** @typedef {import('../../lib/types.js').TransmitOptions} TransmitOptions */
 
@@ -189,25 +186,14 @@ class MockContext {
     /** @type {MockReader[]} */
     this._readers = [];
     this._valid = true;
+    this._monitoring = false;
+    /** @type {((event: { type: string; reader: string; state: number; atr: Buffer | null }) => void) | null} */
+    this._callback = null;
   }
 
   get isValid() {
     return this._valid;
   }
-
-  /** @returns {MockReader[]} */
-  listReaders() {
-    if (!this._valid) {
-      throw new Error("Context is not valid");
-    }
-    return [...this._readers];
-  }
-
-  async waitForChange(_readers, _timeout) {
-    return null;
-  }
-
-  cancel() {}
 
   close() {
     this._valid = false;
@@ -221,6 +207,96 @@ class MockContext {
   /** @param {string} name */
   removeReader(name) {
     this._readers = this._readers.filter((r) => r.name !== name);
+  }
+
+  /**
+   * Create a mock NativeReader for the given reader name.
+   * The mock reader delegates connect() back to this.connect()
+   * so tests can override connect behavior on the context.
+   * @param {string} readerName
+   * @returns {{ name: string; connected: boolean; protocol: number; atr: Buffer | null; connect: Function; transmit: Function; control: Function; getStatus: Function; disconnect: Function; reconnect: Function }}
+   */
+  _createNativeReader(readerName) {
+    const self = this;
+    /** @type {MockCard | null} */
+    let card = null;
+
+    const nativeReader = {
+      name: readerName,
+      _connected: false,
+      _protocol: 0,
+
+      get connected() {
+        return nativeReader._connected;
+      },
+      get protocol() {
+        return nativeReader._protocol;
+      },
+      get atr() {
+        return card ? card.atr : null;
+      },
+
+      /**
+       * @param {number} [shareMode]
+       * @param {number} [protocols]
+       * @returns {Promise<void>}
+       */
+      async connect(shareMode, protocols) {
+        card = await self.connect(readerName, shareMode, protocols);
+        nativeReader._connected = true;
+        nativeReader._protocol = card.protocol;
+      },
+
+      /**
+       * @param {Buffer | number[]} command
+       * @param {TransmitOptions} [options]
+       * @returns {Promise<Buffer>}
+       */
+      async transmit(command, options) {
+        if (!nativeReader._connected || !card) throw new Error("Card is not connected");
+        return card.transmit(command, options);
+      },
+
+      /**
+       * @param {number} code
+       * @param {Buffer | number[]} [data]
+       * @returns {Promise<Buffer>}
+       */
+      async control(code, data) {
+        if (!nativeReader._connected || !card) throw new Error("Card is not connected");
+        return card.control(code, data);
+      },
+
+      /** @returns {import('../../lib/types.js').CardStatus} */
+      getStatus() {
+        if (!nativeReader._connected || !card) throw new Error("Card is not connected");
+        return card.getStatus();
+      },
+
+      /** @param {number} [disposition] */
+      disconnect(_disposition) {
+        if (!nativeReader._connected) return;
+        if (card) card.disconnect();
+        nativeReader._connected = false;
+        nativeReader._protocol = 0;
+        card = null;
+      },
+
+      /**
+       * @param {number} [shareMode]
+       * @param {number} [protocol]
+       * @param {number} [init]
+       * @returns {Promise<number>}
+       */
+      async reconnect(shareMode, protocol, init) {
+        if (!nativeReader._connected || !card) throw new Error("Card is not connected");
+        const result = await card.reconnect(shareMode, protocol, init);
+        nativeReader._protocol = card.protocol;
+        return result;
+      },
+    };
+
+    return nativeReader;
   }
 
   /**
@@ -239,64 +315,55 @@ class MockContext {
     }
     return reader.connect(_shareMode, _protocol);
   }
-}
 
-class MockReaderMonitor {
-  constructor() {
-    this._running = false;
-    /** @type {((event: MonitorEvent) => void) | null} */
-    this._callback = null;
-    /** @type {MockReader[]} */
-    this._readers = [];
-  }
-
-  get isRunning() {
-    return this._running;
-  }
-
-  /** @param {(event: MonitorEvent) => void} callback */
-  start(callback) {
-    if (this._running) {
+  /** @param {(event: { type: string; reader: string; state: number; atr: Buffer | null }) => void} callback */
+  startMonitor(callback) {
+    if (this._monitoring) {
       throw new Error("Monitor is already running");
     }
     this._callback = callback;
-    this._running = true;
+    this._monitoring = true;
 
     for (const reader of this._readers) {
-      this._emitEvent("reader-attached", reader.name, reader.state, reader.atr);
+      this._emitEvent("attached", reader.name, reader.state, reader.atr);
     }
   }
 
-  stop() {
-    this._running = false;
+  stopMonitor() {
+    this._monitoring = false;
     this._callback = null;
   }
 
   /**
-   * @param {MonitorEvent['type']} type
+   * @param {string} type
    * @param {string} readerName
    * @param {number} state
    * @param {Buffer | null} atr
    */
   _emitEvent(type, readerName, state, atr) {
     if (this._callback) {
-      this._callback({ type, reader: readerName, state, atr });
+      /** @type {Record<string, unknown>} */
+      const event = { type, reader: readerName, state, atr };
+      if (type === "attached") {
+        event.nativeReader = this._createNativeReader(readerName);
+      }
+      this._callback(/** @type {any} */ (event));
     }
   }
 
   /** @param {MockReader} reader */
   attachReader(reader) {
     this._readers.push(reader);
-    if (this._running) {
-      this._emitEvent("reader-attached", reader.name, reader.state, reader.atr);
+    if (this._monitoring) {
+      this._emitEvent("attached", reader.name, reader.state, reader.atr);
     }
   }
 
   /** @param {string} name */
   detachReader(name) {
     this._readers = this._readers.filter((r) => r.name !== name);
-    if (this._running) {
-      this._emitEvent("reader-detached", name, 0, null);
+    if (this._monitoring) {
+      this._emitEvent("detached", name, 0, null);
     }
   }
 
@@ -308,8 +375,8 @@ class MockReaderMonitor {
     const reader = this._readers.find((r) => r.name === readerName);
     if (reader) {
       reader.insertCard(card);
-      if (this._running) {
-        this._emitEvent("card-inserted", readerName, reader.state, card.atr);
+      if (this._monitoring) {
+        this._emitEvent("changed", readerName, reader.state, card.atr);
       }
     }
   }
@@ -319,26 +386,22 @@ class MockReaderMonitor {
     const reader = this._readers.find((r) => r.name === readerName);
     if (reader) {
       reader.removeCard();
-      if (this._running) {
-        this._emitEvent("card-removed", readerName, reader.state, null);
+      if (this._monitoring) {
+        this._emitEvent("changed", readerName, reader.state, null);
       }
     }
   }
 }
 
 /**
- * Create mock DI options for createClient.
+ * Create mock DI options for createContext.
  * @param {MockContext} context
- * @param {MockReaderMonitor} monitor
- * @returns {Partial<ClientOptions>}
+ * @returns {Record<string, unknown>}
  */
-function createMockOptions(context, monitor) {
+function createMockOptions(context) {
   return {
     Context: function () {
       return context;
-    },
-    ReaderMonitor: function () {
-      return monitor;
     },
     SCARD_STATE_PRESENT: 0x20,
     SCARD_SHARE_SHARED: 2,
@@ -360,8 +423,8 @@ const SCARD_PROTOCOL_T1 = 2;
  */
 
 /**
- * Create a complete test setup with mock context, monitor, reader, and card.
- * Returns a factory function to create clients with pre-configured mock DI.
+ * Create a complete test setup with mock context, reader, and card.
+ * Returns a factory function to create contexts with pre-configured mock DI.
  * @param {TestSetupOptions} [options]
  */
 function createTestSetup(options = {}) {
@@ -376,32 +439,29 @@ function createTestSetup(options = {}) {
   const card = new MockCard(cardProtocol, cardAtr, cardResponses);
   const reader = new ReaderClass(readerName, card);
   const context = new MockContext();
-  const monitor = new MockReaderMonitor();
 
   context.addReader(reader);
-  monitor.attachReader(reader);
 
-  const mockOptions = createMockOptions(context, monitor);
+  const mockOptions = createMockOptions(context);
 
   /**
-   * Create a client with pre-configured mock DI.
-   * @param {Partial<ClientOptions>} [clientOptions]
+   * Create a context with pre-configured mock DI.
+   * @param {Partial<ContextOptions>} [contextOptions]
    */
-  function client(clientOptions = {}) {
-    return createClient({
+  function create(contextOptions = {}) {
+    return createContext({
       ...mockOptions,
-      ...clientOptions,
+      ...contextOptions,
     });
   }
 
-  return { client, context, monitor, reader, card };
+  return { create, context, reader, card };
 }
 
 export {
   MockCard,
   MockReader,
   MockContext,
-  MockReaderMonitor,
   createMockOptions,
   createTestSetup,
   SCARD_PROTOCOL_T0,

@@ -1,79 +1,6 @@
 #include "async_workers.h"
-#include "pcsc_card.h"
 #include "pcsc_errors.h"
 #include <cstring>
-
-// ============================================================================
-// WaitForChangeWorker
-// ============================================================================
-
-WaitForChangeWorker::WaitForChangeWorker(
-    Napi::Env env,
-    SCARDCONTEXT context,
-    std::vector<std::string> readerNames,
-    std::vector<DWORD> currentStates,
-    DWORD timeout,
-    Napi::Promise::Deferred deferred)
-    : Napi::AsyncWorker(env),
-      context_(context),
-      readerNames_(std::move(readerNames)),
-      timeout_(timeout),
-      result_(SCARD_S_SUCCESS),
-      deferred_(deferred) {
-
-    // Initialize reader states
-    states_.resize(readerNames_.size());
-    for (size_t i = 0; i < readerNames_.size(); i++) {
-        memset(&states_[i], 0, sizeof(SCARD_READERSTATE));
-        states_[i].szReader = readerNames_[i].c_str();
-        states_[i].dwCurrentState = (i < currentStates.size()) ? currentStates[i] : SCARD_STATE_UNAWARE;
-    }
-}
-
-void WaitForChangeWorker::Execute() {
-    // This runs on worker thread - safe to block
-    result_ = SCardGetStatusChange(context_, timeout_, states_.data(), states_.size());
-}
-
-void WaitForChangeWorker::OnOK() {
-    Napi::Env env = Env();
-
-    if (result_ == SCARD_S_SUCCESS) {
-        // Build array of reader states
-        Napi::Array changes = Napi::Array::New(env);
-
-        for (size_t i = 0; i < states_.size(); i++) {
-            Napi::Object reader = Napi::Object::New(env);
-            reader.Set("name", Napi::String::New(env, readerNames_[i]));
-            reader.Set("state", Napi::Number::New(env, states_[i].dwEventState));
-            reader.Set("changed", Napi::Boolean::New(env,
-                (states_[i].dwEventState & SCARD_STATE_CHANGED) != 0));
-
-            if (states_[i].cbAtr > 0) {
-                reader.Set("atr", Napi::Buffer<uint8_t>::Copy(
-                    env, states_[i].rgbAtr, states_[i].cbAtr));
-            } else {
-                reader.Set("atr", env.Null());
-            }
-
-            changes.Set(static_cast<uint32_t>(i), reader);
-        }
-
-        deferred_.Resolve(changes);
-    } else if (result_ == static_cast<LONG>(SCARD_E_CANCELLED)) {
-        // Cancelled - resolve with null
-        deferred_.Resolve(env.Null());
-    } else if (result_ == static_cast<LONG>(SCARD_E_TIMEOUT)) {
-        // Timeout - resolve with empty array
-        deferred_.Resolve(Napi::Array::New(env, 0));
-    } else {
-        deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
-    }
-}
-
-void WaitForChangeWorker::OnError(const Napi::Error& error) {
-    deferred_.Reject(error.Value());
-}
 
 // ============================================================================
 // TransmitWorker
@@ -204,6 +131,9 @@ ConnectWorker::ConnectWorker(
     std::string readerName,
     DWORD shareMode,
     DWORD preferredProtocols,
+    SCARDHANDLE* cardOut,
+    DWORD* protocolOut,
+    bool* connectedOut,
     Napi::Promise::Deferred deferred)
     : Napi::AsyncWorker(env),
       context_(context),
@@ -212,6 +142,9 @@ ConnectWorker::ConnectWorker(
       preferredProtocols_(preferredProtocols),
       card_(0),
       activeProtocol_(0),
+      cardOut_(cardOut),
+      protocolOut_(protocolOut),
+      connectedOut_(connectedOut),
       result_(SCARD_S_SUCCESS),
       deferred_(deferred) {
 }
@@ -231,8 +164,10 @@ void ConnectWorker::OnOK() {
     Napi::Env env = Env();
 
     if (result_ == SCARD_S_SUCCESS) {
-        Napi::Object card = PCSCCard::NewInstance(env, card_, activeProtocol_, readerName_);
-        deferred_.Resolve(card);
+        *cardOut_ = card_;
+        *protocolOut_ = activeProtocol_;
+        *connectedOut_ = true;
+        deferred_.Resolve(env.Undefined());
     } else {
         deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
     }

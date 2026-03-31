@@ -7,12 +7,11 @@ import {
   MockCard,
   MockReader,
   MockContext,
-  MockReaderMonitor,
   createMockOptions,
   createTestSetup,
   SCARD_PROTOCOL_T1,
 } from "../helpers/mock.js";
-import { createClient } from "../../lib/client.js";
+import { createContext } from "../../lib/context.js";
 import {
   PCSCError,
   CardRemovedError,
@@ -107,10 +106,9 @@ describe("MockCard", () => {
   });
 
   it("should update protocol after reconnect with different protocol", async () => {
-    const card = new MockCard(1, Buffer.from([0x3b])); // Start with T=0 (protocol 1)
+    const card = new MockCard(1, Buffer.from([0x3b]));
     assert.strictEqual(card.protocol, 1);
 
-    // Simulate reconnection with T=1 protocol
     card.setReconnectProtocol(2);
     const newProtocol = await card.reconnect();
 
@@ -139,7 +137,7 @@ describe("MockReader", () => {
 
     assert.strictEqual(reader.name, "Test Reader");
     assert.strictEqual(reader.atr, null);
-    assert.strictEqual(reader.state & 0x20, 0); // Not PRESENT
+    assert.strictEqual(reader.state & 0x20, 0);
   });
 
   it("should create reader with card", () => {
@@ -148,7 +146,7 @@ describe("MockReader", () => {
 
     assert.strictEqual(reader.name, "Test Reader");
     assert(reader.atr.equals(Buffer.from([0x3b])));
-    assert.strictEqual(reader.state & 0x20, 0x20); // PRESENT
+    assert.strictEqual(reader.state & 0x20, 0x20);
   });
 
   it("should connect to card", async () => {
@@ -192,127 +190,107 @@ describe("MockContext", () => {
     assert.strictEqual(ctx.isValid, false);
   });
 
-  it("should list readers", () => {
+  it("should connect to a reader's card", async () => {
     const ctx = new MockContext();
-    const reader1 = new MockReader("Reader 1");
-    const reader2 = new MockReader("Reader 2");
+    const card = new MockCard(1, Buffer.from([0x3b]));
+    const reader = new MockReader("Reader 1", card);
+    ctx.addReader(reader);
 
-    ctx.addReader(reader1);
-    ctx.addReader(reader2);
-
-    const readers = ctx.listReaders();
-    assert.strictEqual(readers.length, 2);
-    assert.strictEqual(readers[0].name, "Reader 1");
-    assert.strictEqual(readers[1].name, "Reader 2");
+    const connectedCard = await ctx.connect("Reader 1");
+    assert.strictEqual(connectedCard, card);
   });
 
-  it("should remove readers", () => {
-    const ctx = new MockContext();
-    ctx.addReader(new MockReader("Reader 1"));
-    ctx.addReader(new MockReader("Reader 2"));
-
-    ctx.removeReader("Reader 1");
-
-    const readers = ctx.listReaders();
-    assert.strictEqual(readers.length, 1);
-    assert.strictEqual(readers[0].name, "Reader 2");
-  });
-
-  it("should throw when listing readers on closed context", () => {
+  it("should throw when connecting on closed context", async () => {
     const ctx = new MockContext();
     ctx.close();
 
-    assert.throws(() => ctx.listReaders(), {
+    await assert.rejects(() => ctx.connect("Reader 1"), {
       message: "Context is not valid",
     });
   });
 });
 
-describe("MockReaderMonitor", () => {
+describe("MockContext Monitor", () => {
   it("should start and stop monitoring", () => {
-    const monitor = new MockReaderMonitor();
+    const context = new MockContext();
 
-    assert.strictEqual(monitor.isRunning, false);
+    context.startMonitor(() => {});
 
-    monitor.start(() => {});
-    assert.strictEqual(monitor.isRunning, true);
-
-    monitor.stop();
-    assert.strictEqual(monitor.isRunning, false);
+    context.stopMonitor();
   });
 
   it("should throw when starting already running monitor", () => {
-    const monitor = new MockReaderMonitor();
-    monitor.start(() => {});
+    const context = new MockContext();
+    context.startMonitor(() => {});
 
-    assert.throws(() => monitor.start(() => {}), {
+    assert.throws(() => context.startMonitor(() => {}), {
       message: "Monitor is already running",
     });
 
-    monitor.stop();
+    context.stopMonitor();
   });
 
-  it("should emit reader-attached for existing readers on start", () => {
-    const monitor = new MockReaderMonitor();
+  it("should emit attached for existing readers on start", () => {
+    const context = new MockContext();
     const reader = new MockReader("Test Reader");
-    monitor.attachReader(reader);
+    context.addReader(reader);
 
     /** @type {{ type: string; reader: string }[]} */
     const events = [];
-    monitor.start((event) => events.push(event));
+    context.startMonitor((event) => events.push(event));
 
     assert.strictEqual(events.length, 1);
-    assert.strictEqual(events[0].type, "reader-attached");
+    assert.strictEqual(events[0].type, "attached");
     assert.strictEqual(events[0].reader, "Test Reader");
 
-    monitor.stop();
+    context.stopMonitor();
   });
 
   it("should emit events when attaching/detaching readers", () => {
-    const monitor = new MockReaderMonitor();
+    const context = new MockContext();
     /** @type {{ type: string }[]} */
     const events = [];
 
-    monitor.start((event) => events.push(event));
+    context.startMonitor((event) => events.push(event));
 
     const reader = new MockReader("Test Reader");
-    monitor.attachReader(reader);
+    context.attachReader(reader);
 
     assert.strictEqual(events.length, 1);
-    assert.strictEqual(events[0].type, "reader-attached");
+    assert.strictEqual(events[0].type, "attached");
 
-    monitor.detachReader("Test Reader");
+    context.detachReader("Test Reader");
 
     assert.strictEqual(events.length, 2);
-    assert.strictEqual(events[1].type, "reader-detached");
+    assert.strictEqual(events[1].type, "detached");
 
-    monitor.stop();
+    context.stopMonitor();
   });
 
-  it("should emit events when inserting/removing cards", () => {
-    const monitor = new MockReaderMonitor();
+  it("should emit changed events when inserting/removing cards", () => {
+    const context = new MockContext();
     /** @type {{ type: string; atr?: Buffer | null }[]} */
     const events = [];
 
     const reader = new MockReader("Test Reader");
-    monitor.attachReader(reader);
+    context.addReader(reader);
 
-    monitor.start((event) => events.push(event));
-    events.length = 0; // Clear the reader-attached event
+    context.startMonitor((event) => events.push(event));
+    events.length = 0;
 
     const card = new MockCard(1, Buffer.from([0x3b, 0x8f]));
-    monitor.insertCard("Test Reader", card);
+    context.insertCard("Test Reader", card);
 
     assert.strictEqual(events.length, 1);
-    assert.strictEqual(events[0].type, "card-inserted");
+    assert.strictEqual(events[0].type, "changed");
     assert(events[0].atr.equals(Buffer.from([0x3b, 0x8f])));
 
-    monitor.removeCard("Test Reader");
+    context.removeCard("Test Reader");
 
     assert.strictEqual(events.length, 2);
-    assert.strictEqual(events[1].type, "card-removed");
+    assert.strictEqual(events[1].type, "changed");
 
-    monitor.stop();
+    context.stopMonitor();
   });
 });
 
@@ -320,9 +298,8 @@ describe("createTestSetup Helper", () => {
   it("should create a complete test setup with defaults", () => {
     const setup = createTestSetup();
 
-    assert(setup.client, "Should have client factory");
+    assert(setup.create, "Should have create factory");
     assert(setup.context, "Should have context");
-    assert(setup.monitor, "Should have monitor");
     assert(setup.reader, "Should have reader");
     assert(setup.card, "Should have card");
     assert.strictEqual(setup.reader.name, "Test Reader");
@@ -347,44 +324,43 @@ describe("createTestSetup Helper", () => {
     assert.deepStrictEqual(response, Buffer.from([0x01, 0x02, 0x90, 0x00]));
   });
 
-  it("should emit events when started", async () => {
+  it("should emit events when created", async () => {
     const setup = createTestSetup();
     /** @type {unknown[]} */
     const events = [];
 
-    const client = setup.client({
-      onReaderAttached: (info) => events.push(info),
+    const ctx = setup.create({
+      onReaderAttached: (reader) => events.push(reader),
     });
-    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.strictEqual(events.length, 1);
-    client.stop();
+    ctx.close();
   });
 });
 
-describe("Client Integration", () => {
-  it("should call onReaderAttached callback", async () => {
+describe("Context Integration", () => {
+  it("should call onReaderAttached callback with reader object", async () => {
     const setup = createTestSetup({ readerName: "ACR122U" });
-    /** @type {{ name: string }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const events = [];
 
-    const client = setup.client({
-      onReaderAttached: (info) => events.push(info),
+    const ctx = setup.create({
+      onReaderAttached: (reader) => events.push(reader),
     });
-
-    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].name, "ACR122U");
+    assert.strictEqual(typeof events[0].connect, "function");
+    assert.strictEqual(typeof events[0].transmit, "function");
 
-    client.stop();
+    ctx.close();
   });
 
-  it("should call onCardInserted callback with card object", async () => {
+  it("should call onCardInserted callback with reader object", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f, 0x80, 0x01]), [
       {
         command: [0xff, 0xca, 0x00, 0x00, 0x00],
@@ -393,87 +369,76 @@ describe("Client Integration", () => {
     ]);
     const mockReader = new MockReader("ACR122U", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ name: string; card: { transmit: Function } }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const events = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => events.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => events.push(reader),
     });
-
-    client.start();
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].name, "ACR122U");
-    assert(events[0].card);
+    assert.strictEqual(events[0].connected, true);
 
-    const response = await events[0].card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
+    const response = await events[0].transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x90, 0x00])));
 
-    client.stop();
+    ctx.close();
   });
 
   it("should call onCardRemoved callback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b]));
     const mockReader = new MockReader("ACR122U", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
     /** @type {string[]} */
     const events = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
       onCardInserted: () => events.push("inserted"),
       onCardRemoved: () => events.push("removed"),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    mockMonitor.removeCard("ACR122U");
+    mockContext.removeCard("ACR122U");
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert(events.includes("inserted"));
     assert(events.includes("removed"));
 
-    client.stop();
+    ctx.close();
   });
 
   it("should handle multiple readers", async () => {
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     const reader1 = new MockReader("Reader 1", new MockCard(1, Buffer.from([0x3b])));
     const reader2 = new MockReader("Reader 2", new MockCard(2, Buffer.from([0x3c])));
 
     mockContext.addReader(reader1);
     mockContext.addReader(reader2);
-    mockMonitor.attachReader(reader1);
-    mockMonitor.attachReader(reader2);
 
     /** @type {string[]} */
     const readerEvents = [];
     /** @type {string[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onReaderAttached: (info) => readerEvents.push(info.name),
-      onCardInserted: (info) => cardEvents.push(info.name),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onReaderAttached: (reader) => readerEvents.push(reader.name),
+      onCardInserted: (reader) => cardEvents.push(reader.name),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     assert.strictEqual(readerEvents.length, 2);
@@ -484,36 +449,131 @@ describe("Client Integration", () => {
     assert(cardEvents.includes("Reader 1"));
     assert(cardEvents.includes("Reader 2"));
 
-    client.stop();
+    ctx.close();
   });
 
   it("should call onReaderDetached callback", async () => {
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
     const reader = new MockReader("ACR122U");
 
     mockContext.addReader(reader);
-    mockMonitor.attachReader(reader);
 
     /** @type {string[]} */
     const events = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
       onReaderAttached: () => events.push("attached"),
       onReaderDetached: () => events.push("detached"),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    mockMonitor.detachReader("ACR122U");
+    mockContext.detachReader("ACR122U");
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert(events.includes("attached"));
     assert(events.includes("detached"));
 
-    client.stop();
+    ctx.close();
+  });
+
+  it("should track readers in context.readers map", async () => {
+    const mockContext = new MockContext();
+
+    const reader1 = new MockReader("Reader 1");
+    const reader2 = new MockReader("Reader 2");
+    mockContext.addReader(reader1);
+    mockContext.addReader(reader2);
+
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    assert.strictEqual(ctx.readers.size, 2);
+    assert(ctx.readers.has("Reader 1"));
+    assert(ctx.readers.has("Reader 2"));
+    assert.strictEqual(ctx.readers.get("Reader 1").name, "Reader 1");
+
+    ctx.close();
+    assert.strictEqual(ctx.readers.size, 0);
+  });
+
+  it("should disconnect cards on close", async () => {
+    const mockCard = new MockCard(1, Buffer.from([0x3b]));
+    const mockReader = new MockReader("ACR122U", mockCard);
+    const mockContext = new MockContext();
+
+    mockContext.addReader(mockReader);
+
+    /** @type {import('../../lib/types.js').Reader[]} */
+    const cardEvents = [];
+
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.strictEqual(cardEvents.length, 1);
+    assert.strictEqual(cardEvents[0].connected, true);
+
+    ctx.close();
+
+    assert.strictEqual(cardEvents[0].connected, false);
+  });
+
+  it("should call onReaderChange for changed events", async () => {
+    const mockContext = new MockContext();
+    const mockReader = new MockReader("ACR122U");
+    mockContext.addReader(mockReader);
+
+    /** @type {{ reader: string; prevState: number }[]} */
+    const stateChanges = [];
+
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      autoConnect: false,
+      onReaderChange: (reader, prevState) => stateChanges.push({ reader: reader.name, prevState }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const card = new MockCard(1, Buffer.from([0x3b]));
+    mockContext.insertCard("ACR122U", card);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.strictEqual(stateChanges.length, 1);
+    assert.strictEqual(stateChanges[0].reader, "ACR122U");
+
+    ctx.close();
+  });
+
+  it("should not auto-connect when autoConnect is false", async () => {
+    const mockCard = new MockCard(1, Buffer.from([0x3b]));
+    const mockReader = new MockReader("ACR122U", mockCard);
+    const mockContext = new MockContext();
+
+    mockContext.addReader(mockReader);
+
+    /** @type {import('../../lib/types.js').Reader[]} */
+    const cardEvents = [];
+
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      autoConnect: false,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.strictEqual(cardEvents.length, 0);
+    assert.strictEqual(ctx.readers.size, 1);
+
+    ctx.close();
   });
 });
 
@@ -524,10 +584,8 @@ describe("Protocol Fallback", () => {
     const mockReader = new MockReader("Test Reader", mockCard);
     let connectCalls = 0;
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
     const originalConnect = mockContext.connect.bind(mockContext);
     mockContext.connect = async function connect(readerName, _shareMode, protocol) {
@@ -543,30 +601,27 @@ describe("Protocol Fallback", () => {
     /** @type {Error[]} */
     const errors = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => cardEvents.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
       onError: (err) => errors.push(err),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(connectCalls, 2, "Should have called connect twice");
     assert.strictEqual(errors.length, 0, "Should not emit error");
     assert.strictEqual(cardEvents.length, 1, "Should emit card-inserted event");
 
-    client.stop();
+    ctx.close();
   });
 
   it("should rethrow non-unresponsive errors without fallback", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]));
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
     mockContext.connect = async function connect() {
       throw new Error("Sharing violation");
@@ -577,13 +632,12 @@ describe("Protocol Fallback", () => {
     /** @type {Error[]} */
     const errors = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => cardEvents.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
       onError: (err) => errors.push(err),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(cardEvents.length, 0, "Should not emit card-inserted event");
@@ -593,7 +647,7 @@ describe("Protocol Fallback", () => {
       "Error should contain original message",
     );
 
-    client.stop();
+    ctx.close();
   });
 });
 
@@ -706,7 +760,6 @@ describe("parseFeatures", () => {
   });
 
   it("should parse single feature TLV", () => {
-    // TLV: tag=0x06 (VERIFY_PIN_DIRECT), length=4, value=0x42000D48 (control code)
     const tlv = Buffer.from([0x06, 0x04, 0x42, 0x00, 0x0d, 0x48]);
     const features = parseFeatures(tlv);
 
@@ -716,20 +769,8 @@ describe("parseFeatures", () => {
   });
 
   it("should parse multiple feature TLVs", () => {
-    // Two TLVs: VERIFY_PIN_DIRECT and MODIFY_PIN_DIRECT
     const tlv = Buffer.from([
-      0x06,
-      0x04,
-      0x42,
-      0x00,
-      0x0d,
-      0x48, // VERIFY_PIN_DIRECT = 0x42000D48
-      0x07,
-      0x04,
-      0x42,
-      0x00,
-      0x0d,
-      0x4c, // MODIFY_PIN_DIRECT = 0x42000D4C
+      0x06, 0x04, 0x42, 0x00, 0x0d, 0x48, 0x07, 0x04, 0x42, 0x00, 0x0d, 0x4c,
     ]);
     const features = parseFeatures(tlv);
 
@@ -739,19 +780,7 @@ describe("parseFeatures", () => {
   });
 
   it("should skip TLVs with non-4-byte length", () => {
-    // TLV with length=2 (not 4) should be skipped
-    const tlv = Buffer.from([
-      0x06,
-      0x02,
-      0x00,
-      0x00, // length=2, skip this
-      0x07,
-      0x04,
-      0x42,
-      0x00,
-      0x0d,
-      0x4c, // valid TLV
-    ]);
+    const tlv = Buffer.from([0x06, 0x02, 0x00, 0x00, 0x07, 0x04, 0x42, 0x00, 0x0d, 0x4c]);
     const features = parseFeatures(tlv);
 
     assert.strictEqual(features.size, 1, "Should have one feature (skipped invalid)");
@@ -760,15 +789,13 @@ describe("parseFeatures", () => {
   });
 
   it("should handle truncated buffer gracefully", () => {
-    // Buffer too short to contain a full TLV
-    const tlv = Buffer.from([0x06, 0x04, 0x42]); // only 3 bytes after tag+length
+    const tlv = Buffer.from([0x06, 0x04, 0x42]);
     const features = parseFeatures(tlv);
 
     assert.strictEqual(features.size, 0, "Should return empty map for truncated buffer");
   });
 
   it("should handle buffer shorter than minimum TLV", () => {
-    // Less than 4 bytes (minimum for tag + length + 2 bytes)
     const tlv = Buffer.from([0x06, 0x04]);
     const features = parseFeatures(tlv);
 
@@ -776,32 +803,9 @@ describe("parseFeatures", () => {
   });
 
   it("should parse real-world CCID response", () => {
-    // Simulated response from a real pinpad reader
     const tlv = Buffer.from([
-      0x06,
-      0x04,
-      0x42,
-      0x33,
-      0x00,
-      0x06, // VERIFY_PIN_DIRECT
-      0x07,
-      0x04,
-      0x42,
-      0x33,
-      0x00,
-      0x07, // MODIFY_PIN_DIRECT
-      0x0a,
-      0x04,
-      0x42,
-      0x33,
-      0x00,
-      0x0a, // IFD_PIN_PROPERTIES
-      0x12,
-      0x04,
-      0x42,
-      0x33,
-      0x00,
-      0x12, // GET_TLV_PROPERTIES
+      0x06, 0x04, 0x42, 0x33, 0x00, 0x06, 0x07, 0x04, 0x42, 0x33, 0x00, 0x07, 0x0a, 0x04, 0x42,
+      0x33, 0x00, 0x0a, 0x12, 0x04, 0x42, 0x33, 0x00, 0x12,
     ]);
     const features = parseFeatures(tlv);
 
@@ -813,20 +817,16 @@ describe("parseFeatures", () => {
   });
 
   it("should not read beyond buffer with malformed length field", () => {
-    // TLV with length=255 (would read way beyond buffer if not validated)
     const tlv = Buffer.from([0x06, 0xff, 0x42, 0x00, 0x0d, 0x48]);
     const features = parseFeatures(tlv);
 
-    // Should safely skip this malformed entry and not crash
     assert.strictEqual(features.size, 0, "Should return empty map for malformed length");
   });
 
   it("should handle length that exactly exceeds remaining bytes", () => {
-    // TLV says length=6 but only 4 bytes remain
     const tlv = Buffer.from([0x06, 0x06, 0x42, 0x00, 0x0d, 0x48]);
     const features = parseFeatures(tlv);
 
-    // length != 4, so should be skipped anyway
     assert.strictEqual(features.size, 0, "Should skip non-4 length entries");
   });
 });
@@ -911,14 +911,11 @@ describe("Package Exports (Issue #78)", () => {
 // https://github.com/tomkp/smartcard/issues/82
 describe("Auto GET RESPONSE (Issue #82)", () => {
   it("transmitWithAutoResponse should handle SW1=61 by sending GET RESPONSE", async () => {
-    // Mock card that returns 61 1C (28 more bytes) then the data
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      // Initial command returns SW1=61 with 28 bytes remaining
       {
         command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
         response: [0x61, 0x1c],
       },
-      // GET RESPONSE command returns data + 90 00
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
         response: [
@@ -932,24 +929,18 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: true,
     });
 
-    // Should have sent 2 commands
     assert.strictEqual(mockCard.transmitCount, 2);
-
-    // Response should be data (28 bytes) + 90 00
     assert.strictEqual(response.length, 30);
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
   });
 
   it("transmitWithAutoResponse should handle SW1=6C by retrying with correct Le", async () => {
-    // Mock card that returns 6C 10 (wrong Le, should use 16) then succeeds
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      // Initial command with Le=00 returns 6C 10
       {
         command: [0x00, 0xb2, 0x01, 0x0c, 0x00],
         response: [0x6c, 0x10],
       },
-      // Retry with Le=10 succeeds
       {
         command: [0x00, 0xb2, 0x01, 0x0c, 0x10],
         response: [
@@ -963,23 +954,17 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: true,
     });
 
-    // Should have sent 2 commands
     assert.strictEqual(mockCard.transmitCount, 2);
-
-    // Response should be the successful data
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
   });
 
   it("transmitWithAutoResponse should handle chained SW1=61 responses", async () => {
-    // Mock card that returns multiple 61 XX responses
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      // Initial command
       {
         command: [0x00, 0xca, 0x00, 0x00, 0x00],
         response: [0x61, 0x10],
       },
-      // First GET RESPONSE - returns more data available
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x10],
         response: [
@@ -987,7 +972,6 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
           0x10, 0x61, 0x08,
         ],
       },
-      // Second GET RESPONSE - final data
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x08],
         response: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x90, 0x00],
@@ -998,11 +982,8 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: true,
     });
 
-    // Should have sent 3 commands
     assert.strictEqual(mockCard.transmitCount, 3);
-
-    // Response should be all data concatenated + 90 00
-    assert.strictEqual(response.length, 26); // 16 + 8 + 2
+    assert.strictEqual(response.length, 26);
     assert.strictEqual(response[0], 0x01);
     assert.strictEqual(response[15], 0x10);
     assert.strictEqual(response[16], 0x11);
@@ -1023,10 +1004,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: true,
     });
 
-    // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
-
-    // Response unchanged
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00])));
   });
 
@@ -1042,10 +1020,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: false,
     });
 
-    // Should only transmit once - no automatic GET RESPONSE
     assert.strictEqual(mockCard.transmitCount, 1);
-
-    // Response unchanged (raw 61 1C)
     assert(response.equals(Buffer.from([0x61, 0x1c])));
   });
 
@@ -1059,10 +1034,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
 
     const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {});
 
-    // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
-
-    // Response unchanged (raw 61 1C)
     assert(response.equals(Buffer.from([0x61, 0x1c])));
   });
 
@@ -1070,7 +1042,7 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
       {
         command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
-        response: [0x6a, 0x82], // File not found
+        response: [0x6a, 0x82],
       },
     ]);
 
@@ -1078,15 +1050,11 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
       autoGetResponse: true,
     });
 
-    // Should only transmit once
     assert.strictEqual(mockCard.transmitCount, 1);
-
-    // Error response unchanged
     assert(response.equals(Buffer.from([0x6a, 0x82])));
   });
 
   it("transmitWithAutoResponse should handle SW1=6C with empty original Le", async () => {
-    // 4-byte command (no Le byte)
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
       {
         command: [0x00, 0xca, 0x9f, 0x17],
@@ -1108,16 +1076,13 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
 });
 
 // https://github.com/tomkp/smartcard/issues/105
-describe("card.transmit() autoGetResponse option (Issue #105)", () => {
-  it("should handle SW1=61 when autoGetResponse option is passed to card.transmit()", async () => {
-    // Mock card that returns 61 1C (28 more bytes) then the data
+describe("reader.transmit() autoGetResponse option (Issue #105)", () => {
+  it("should handle SW1=61 when autoGetResponse option is passed to reader.transmit()", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      // Initial command returns SW1=61 with 28 bytes remaining
       {
         command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
         response: [0x61, 0x1c],
       },
-      // GET RESPONSE command returns data + 90 00
       {
         command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
         response: [
@@ -1128,43 +1093,35 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     ]);
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ card: any }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => cardEvents.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     assert.strictEqual(cardEvents.length, 1, "Should have card-inserted event");
-    const card = cardEvents[0].card;
+    const reader = cardEvents[0];
 
-    // This should work - autoGetResponse passed directly to card.transmit()
-    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
       autoGetResponse: true,
     });
 
-    // Should have sent 2 commands (initial + GET RESPONSE)
     assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
-
-    // Response should be data (28 bytes) + 90 00
     assert.strictEqual(response.length, 30, "Response should be 30 bytes");
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
 
-    client.stop();
+    ctx.close();
   });
 
-  it("should handle SW1=6C when autoGetResponse option is passed to card.transmit()", async () => {
-    // Mock card that returns 6C 10 (wrong Le) then succeeds
+  it("should handle SW1=6C when autoGetResponse option is passed to reader.transmit()", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
       {
         command: [0x00, 0xb2, 0x01, 0x0c, 0x00],
@@ -1180,36 +1137,30 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     ]);
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ card: any }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => cardEvents.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const card = cardEvents[0].card;
+    const reader = cardEvents[0];
 
-    const response = await card.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], {
+    const response = await reader.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], {
       autoGetResponse: true,
     });
 
-    // Should have sent 2 commands
     assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
-
-    // Response should be successful
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
 
-    client.stop();
+    ctx.close();
   });
 
   it("should return raw response when autoGetResponse is not specified", async () => {
@@ -1221,34 +1172,30 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     ]);
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ card: any }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
-      onCardInserted: (event) => cardEvents.push(event),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
+      onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const card = cardEvents[0].card;
+    const reader = cardEvents[0];
 
-    // Without autoGetResponse, should return raw 61 XX
-    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
 
     assert.strictEqual(mockCard.transmitCount, 1, "Should only transmit once");
     assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
 
-    client.stop();
+    ctx.close();
   });
 
-  it("should auto-handle SW1=61 when client-level autoGetResponse is set", async () => {
+  it("should auto-handle SW1=61 when context-level autoGetResponse is set", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
       {
         command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
@@ -1264,37 +1211,33 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     ]);
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ card: any }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
       autoGetResponse: true,
-      onCardInserted: (event) => cardEvents.push(event),
+      onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const card = cardEvents[0].card;
+    const reader = cardEvents[0];
 
-    // No per-call autoGetResponse needed - client-level default applies
-    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
 
     assert.strictEqual(mockCard.transmitCount, 2, "Should have sent 2 commands");
     assert.strictEqual(response.length, 30, "Response should be 30 bytes");
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
 
-    client.stop();
+    ctx.close();
   });
 
-  it("per-call autoGetResponse=false should override client-level default", async () => {
+  it("per-call autoGetResponse=false should override context-level default", async () => {
     const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
       {
         command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
@@ -1303,33 +1246,29 @@ describe("card.transmit() autoGetResponse option (Issue #105)", () => {
     ]);
     const mockReader = new MockReader("Test Reader", mockCard);
     const mockContext = new MockContext();
-    const mockMonitor = new MockReaderMonitor();
 
     mockContext.addReader(mockReader);
-    mockMonitor.attachReader(mockReader);
 
-    /** @type {{ card: any }[]} */
+    /** @type {import('../../lib/types.js').Reader[]} */
     const cardEvents = [];
 
-    const client = createClient({
-      ...createMockOptions(mockContext, mockMonitor),
+    const ctx = createContext({
+      ...createMockOptions(mockContext),
       autoGetResponse: true,
-      onCardInserted: (event) => cardEvents.push(event),
+      onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    client.start();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const card = cardEvents[0].card;
+    const reader = cardEvents[0];
 
-    // Explicitly disable autoGetResponse for this call
-    const response = await card.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
       autoGetResponse: false,
     });
 
     assert.strictEqual(mockCard.transmitCount, 1, "Should only transmit once");
     assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
 
-    client.stop();
+    ctx.close();
   });
 });
