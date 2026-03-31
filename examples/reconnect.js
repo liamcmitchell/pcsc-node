@@ -2,7 +2,7 @@
 /**
  * Demonstrates reader.reconnect() for reset/protocol/share-mode changes.
  *
- * Usage: node reconnect.js [reader-name]
+ * Usage: node reconnect.js
  */
 
 import {
@@ -22,40 +22,15 @@ function protocolName(protocol) {
   return `Unknown (${protocol})`;
 }
 
-function waitForInsert(ctx, readerName) {
-  const existing = [...ctx.readers.values()].find(
-    (reader) => (!readerName || reader.name === readerName) && reader.connected,
-  );
-  if (existing) return Promise.resolve(existing);
-
-  return new Promise((resolve, reject) => {
-    const onInsert = (reader) => {
-      if (!readerName || reader.name === readerName) {
-        cleanup();
-        resolve(reader);
-      }
-    };
-    const onError = (error) => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = () => {
-      ctx.off("insert", onInsert);
-      ctx.off("error", onError);
-    };
-
-    ctx.on("insert", onInsert);
-    ctx.on("error", onError);
-  });
-}
-
 async function main() {
-  const readerName = process.argv[2] || undefined;
   const ctx = new Context();
 
   try {
     ctx.start();
-    const reader = await waitForInsert(ctx, readerName);
+    const reader = await new Promise((resolve, reject) => {
+      ctx.once("insert", resolve);
+      ctx.once("error", reject);
+    });
 
     console.log(`Reader: ${reader.name}`);
     console.log(`Protocol: ${protocolName(reader.protocol)}`);

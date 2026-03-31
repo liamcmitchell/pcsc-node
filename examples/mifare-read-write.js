@@ -2,7 +2,7 @@
 /**
  * MIFARE Classic block read/write demo.
  *
- * Usage: node mifare-read-write.js [reader-name]
+ * Usage: node mifare-read-write.js
  *
  * WARNING: This writes block 4. Use a test card only.
  */
@@ -15,33 +15,6 @@ import {
   MIFARE_CLASSIC,
   MIFARE_ULTRALIGHT,
 } from "../lib/index.js";
-
-function waitForInsert(ctx, readerName) {
-  const existing = [...ctx.readers.values()].find(
-    (reader) => (!readerName || reader.name === readerName) && reader.connected,
-  );
-  if (existing) return Promise.resolve(existing);
-
-  return new Promise((resolve, reject) => {
-    const onInsert = (reader) => {
-      if (!readerName || reader.name === readerName) {
-        cleanup();
-        resolve(reader);
-      }
-    };
-    const onError = (error) => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = () => {
-      ctx.off("insert", onInsert);
-      ctx.off("error", onError);
-    };
-
-    ctx.on("insert", onInsert);
-    ctx.on("error", onError);
-  });
-}
 
 function detectCardType(atr) {
   if (!atr || atr.length < 14) return MIFARE_ULTRALIGHT;
@@ -74,14 +47,16 @@ function assertSuccess(response, operation) {
 }
 
 async function main() {
-  const readerName = process.argv[2] || undefined;
   const ctx = new Context();
 
   try {
     console.log("Waiting for card...");
     ctx.start();
 
-    const reader = await waitForInsert(ctx, readerName);
+    const reader = await new Promise((resolve, reject) => {
+      ctx.once("insert", resolve);
+      ctx.once("error", reject);
+    });
     console.log(`Reader: ${reader.name}`);
     console.log(`Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
 

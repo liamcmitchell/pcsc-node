@@ -2,53 +2,22 @@
 /**
  * Wait for a card and read ATR + UID.
  *
- * Usage: node read-card.js [reader-name]
- *
- * If no reader name is provided, the first reader with an inserted card is used.
+ * Usage: node read-card.js
  */
 
 import { Context, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD } from "../lib/index.js";
 
-function waitForInsert(ctx, readerName) {
-  const existing = [...ctx.readers.values()].find(
-    (reader) => (!readerName || reader.name === readerName) && reader.connected,
-  );
-  if (existing) {
-    return Promise.resolve(existing);
-  }
-
-  return new Promise((resolve, reject) => {
-    const onInsert = (reader) => {
-      if (!readerName || reader.name === readerName) {
-        cleanup();
-        resolve(reader);
-      }
-    };
-    const onError = (error) => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = () => {
-      ctx.off("insert", onInsert);
-      ctx.off("error", onError);
-    };
-
-    ctx.on("insert", onInsert);
-    ctx.on("error", onError);
-  });
-}
-
 async function main() {
-  const readerName = process.argv[2] || undefined;
   const ctx = new Context();
 
   try {
-    console.log(
-      readerName ? `Waiting for card in reader: ${readerName}` : "Waiting for first card...",
-    );
+    console.log("Waiting for first available card...");
 
     ctx.start();
-    const reader = await waitForInsert(ctx, readerName);
+    const reader = await new Promise((resolve, reject) => {
+      ctx.once("insert", resolve);
+      ctx.once("error", reject);
+    });
 
     console.log(`Using reader: ${reader.name}`);
     console.log(`Connected! Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
