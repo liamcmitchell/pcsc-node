@@ -30,11 +30,6 @@ import {
   FEATURE_GET_TLV_PROPERTIES,
   parseFeatures,
 } from "../../lib/control-codes.js";
-import {
-  buildGetResponseCommand,
-  correctLeInCommand,
-  transmitWithAutoResponse,
-} from "../../lib/t0-handler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -819,56 +814,6 @@ describe("parseFeatures", () => {
   });
 });
 
-// https://github.com/tomkp/smartcard/issues/98
-describe("APDU Building Utilities (Issue #98)", () => {
-  describe("buildGetResponseCommand", () => {
-    it("should build GET RESPONSE with Le=0x1C", () => {
-      const cmd = buildGetResponseCommand(0x1c);
-      assert.deepStrictEqual(cmd, Buffer.from([0x00, 0xc0, 0x00, 0x00, 0x1c]));
-    });
-
-    it("should build GET RESPONSE with Le=0x00 (256 bytes)", () => {
-      const cmd = buildGetResponseCommand(0x00);
-      assert.deepStrictEqual(cmd, Buffer.from([0x00, 0xc0, 0x00, 0x00, 0x00]));
-    });
-
-    it("should build GET RESPONSE with Le=0xFF", () => {
-      const cmd = buildGetResponseCommand(0xff);
-      assert.deepStrictEqual(cmd, Buffer.from([0x00, 0xc0, 0x00, 0x00, 0xff]));
-    });
-  });
-
-  describe("correctLeInCommand", () => {
-    it("should append Le to Case 1 command (4 bytes, no Le)", () => {
-      const cmd = Buffer.from([0x00, 0xa4, 0x04, 0x00]);
-      const corrected = correctLeInCommand(cmd, 0x10);
-      assert.deepStrictEqual(corrected, Buffer.from([0x00, 0xa4, 0x04, 0x00, 0x10]));
-    });
-
-    it("should replace Le in Case 2 command (5 bytes, Le at end)", () => {
-      const cmd = Buffer.from([0x00, 0xb0, 0x00, 0x00, 0xff]);
-      const corrected = correctLeInCommand(cmd, 0x20);
-      assert.deepStrictEqual(corrected, Buffer.from([0x00, 0xb0, 0x00, 0x00, 0x20]));
-    });
-
-    it("should replace Le in Case 3/4 command (Lc + data + Le)", () => {
-      const cmd = Buffer.from([0x00, 0xa4, 0x04, 0x00, 0x02, 0xab, 0xcd, 0x00]);
-      const corrected = correctLeInCommand(cmd, 0x30);
-      assert.deepStrictEqual(
-        corrected,
-        Buffer.from([0x00, 0xa4, 0x04, 0x00, 0x02, 0xab, 0xcd, 0x30]),
-      );
-    });
-
-    it("should not modify original command buffer", () => {
-      const cmd = Buffer.from([0x00, 0xb0, 0x00, 0x00, 0xff]);
-      const original = Buffer.from(cmd);
-      correctLeInCommand(cmd, 0x20);
-      assert.deepStrictEqual(cmd, original, "Original should not be modified");
-    });
-  });
-});
-
 // https://github.com/tomkp/smartcard/issues/78
 describe("Package Exports (Issue #78)", () => {
   const packageJsonPath = resolve(__dirname, "../../package.json");
@@ -898,79 +843,87 @@ describe("Package Exports (Issue #78)", () => {
 
 // https://github.com/tomkp/smartcard/issues/82
 describe("Auto GET RESPONSE (Issue #82)", () => {
-  it("transmitWithAutoResponse should handle SW1=61 by sending GET RESPONSE", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
-        response: [0x61, 0x1c],
-      },
-      {
-        command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
-        response: [
-          0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44,
-          0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00,
-        ],
-      },
-    ]);
+  /**
+   * @param {Array<{command: number[], response: number[]}>} cardResponses
+   * @param {number[]} command
+   * @param {import('../../lib/types.js').TransmitOptions} [options]
+   */
+  async function transmitViaReader(cardResponses, command, options) {
+    const { create, card } = createTestSetup({ cardResponses });
+    /** @type {import('../../lib/types.js').Reader[]} */
+    const cardEvents = [];
+    const ctx = create({ onCardInserted: (reader) => cardEvents.push(reader) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const reader = cardEvents[0];
+    try {
+      return { response: await reader.transmit(command, options), card };
+    } finally {
+      ctx.close();
+    }
+  }
 
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 2);
+  it("should handle SW1=61 by sending GET RESPONSE", async () => {
+    const { response, card } = await transmitViaReader(
+      [
+        { command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] },
+        {
+          command: [0x00, 0xc0, 0x00, 0x00, 0x1c],
+          response: [
+            0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44,
+            0x44, 0x46, 0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e,
+            0x90, 0x00,
+          ],
+        },
+      ],
+      [0x00, 0xa4, 0x04, 0x00, 0x0e],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 2);
     assert.strictEqual(response.length, 30);
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
   });
 
-  it("transmitWithAutoResponse should handle SW1=6C by retrying with correct Le", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xb2, 0x01, 0x0c, 0x00],
-        response: [0x6c, 0x10],
-      },
-      {
-        command: [0x00, 0xb2, 0x01, 0x0c, 0x10],
-        response: [
-          0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x9f, 0x09,
-          0x02, 0x90, 0x00,
-        ],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xb2, 0x01, 0x0c, 0x00], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 2);
+  it("should handle SW1=6C by retrying with correct Le", async () => {
+    const { response, card } = await transmitViaReader(
+      [
+        { command: [0x00, 0xb2, 0x01, 0x0c, 0x00], response: [0x6c, 0x10] },
+        {
+          command: [0x00, 0xb2, 0x01, 0x0c, 0x10],
+          response: [
+            0x70, 0x0e, 0x9f, 0x0a, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x9f,
+            0x09, 0x02, 0x90, 0x00,
+          ],
+        },
+      ],
+      [0x00, 0xb2, 0x01, 0x0c, 0x00],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 2);
     assert.strictEqual(response[response.length - 2], 0x90);
     assert.strictEqual(response[response.length - 1], 0x00);
   });
 
-  it("transmitWithAutoResponse should handle chained SW1=61 responses", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xca, 0x00, 0x00, 0x00],
-        response: [0x61, 0x10],
-      },
-      {
-        command: [0x00, 0xc0, 0x00, 0x00, 0x10],
-        response: [
-          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-          0x10, 0x61, 0x08,
-        ],
-      },
-      {
-        command: [0x00, 0xc0, 0x00, 0x00, 0x08],
-        response: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x90, 0x00],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xca, 0x00, 0x00, 0x00], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 3);
+  it("should handle chained SW1=61 responses", async () => {
+    const { response, card } = await transmitViaReader(
+      [
+        { command: [0x00, 0xca, 0x00, 0x00, 0x00], response: [0x61, 0x10] },
+        {
+          command: [0x00, 0xc0, 0x00, 0x00, 0x10],
+          response: [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+            0x0f, 0x10, 0x61, 0x08,
+          ],
+        },
+        {
+          command: [0x00, 0xc0, 0x00, 0x00, 0x08],
+          response: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x90, 0x00],
+        },
+      ],
+      [0x00, 0xca, 0x00, 0x00, 0x00],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 3);
     assert.strictEqual(response.length, 26);
     assert.strictEqual(response[0], 0x01);
     assert.strictEqual(response[15], 0x10);
@@ -980,85 +933,56 @@ describe("Auto GET RESPONSE (Issue #82)", () => {
     assert.strictEqual(response[response.length - 1], 0x00);
   });
 
-  it("transmitWithAutoResponse should pass through normal responses unchanged", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0xff, 0xca, 0x00, 0x00, 0x00],
-        response: [0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0xff, 0xca, 0x00, 0x00, 0x00], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 1);
+  it("should pass through normal responses unchanged", async () => {
+    const { response, card } = await transmitViaReader(
+      [{ command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00] }],
+      [0xff, 0xca, 0x00, 0x00, 0x00],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 1);
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00])));
   });
 
-  it("transmitWithAutoResponse should skip handling when autoGetResponse is false", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
-        response: [0x61, 0x1c],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
-      autoGetResponse: false,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 1);
+  it("should skip handling when autoGetResponse is false", async () => {
+    const { response, card } = await transmitViaReader(
+      [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] }],
+      [0x00, 0xa4, 0x04, 0x00, 0x0e],
+      { autoGetResponse: false },
+    );
+    assert.strictEqual(card.transmitCount, 1);
     assert(response.equals(Buffer.from([0x61, 0x1c])));
   });
 
-  it("transmitWithAutoResponse should skip handling when autoGetResponse is not specified", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
-        response: [0x61, 0x1c],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {});
-
-    assert.strictEqual(mockCard.transmitCount, 1);
+  it("should skip handling when autoGetResponse is not specified", async () => {
+    const { response, card } = await transmitViaReader(
+      [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] }],
+      [0x00, 0xa4, 0x04, 0x00, 0x0e],
+      {},
+    );
+    assert.strictEqual(card.transmitCount, 1);
     assert(response.equals(Buffer.from([0x61, 0x1c])));
   });
 
-  it("transmitWithAutoResponse should pass through error status words", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xa4, 0x04, 0x00, 0x0e],
-        response: [0x6a, 0x82],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xa4, 0x04, 0x00, 0x0e], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 1);
+  it("should pass through error status words", async () => {
+    const { response, card } = await transmitViaReader(
+      [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x6a, 0x82] }],
+      [0x00, 0xa4, 0x04, 0x00, 0x0e],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 1);
     assert(response.equals(Buffer.from([0x6a, 0x82])));
   });
 
-  it("transmitWithAutoResponse should handle SW1=6C with empty original Le", async () => {
-    const mockCard = new MockCard(1, Buffer.from([0x3b, 0x8f]), [
-      {
-        command: [0x00, 0xca, 0x9f, 0x17],
-        response: [0x6c, 0x01],
-      },
-      {
-        command: [0x00, 0xca, 0x9f, 0x17, 0x01],
-        response: [0x03, 0x90, 0x00],
-      },
-    ]);
-
-    const response = await transmitWithAutoResponse(mockCard, [0x00, 0xca, 0x9f, 0x17], {
-      autoGetResponse: true,
-    });
-
-    assert.strictEqual(mockCard.transmitCount, 2);
+  it("should handle SW1=6C with empty original Le (4-byte command)", async () => {
+    const { response, card } = await transmitViaReader(
+      [
+        { command: [0x00, 0xca, 0x9f, 0x17], response: [0x6c, 0x01] },
+        { command: [0x00, 0xca, 0x9f, 0x17, 0x01], response: [0x03, 0x90, 0x00] },
+      ],
+      [0x00, 0xca, 0x9f, 0x17],
+      { autoGetResponse: true },
+    );
+    assert.strictEqual(card.transmitCount, 2);
     assert(response.equals(Buffer.from([0x03, 0x90, 0x00])));
   });
 });
