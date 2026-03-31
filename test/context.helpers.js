@@ -234,6 +234,24 @@ function createMockNative() {
       data.state = 0x02;
       emit({ type: "changed", name, state: data.state, atr: null });
     },
+
+    /**
+     * Emit an error monitor event.
+     * @param {string} message
+     */
+    emitError(message) {
+      emit({ type: "error", name: message, state: 0, atr: null });
+    },
+
+    /**
+     * Emit a 'changed' event for any reader name (even one not in the registry).
+     * @param {string} name
+     * @param {number} state
+     * @param {Buffer | null} atr
+     */
+    emitChanged(name, state, atr) {
+      emit({ type: "changed", name, state, atr });
+    },
   };
 }
 

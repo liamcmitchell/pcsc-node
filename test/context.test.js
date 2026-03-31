@@ -18,7 +18,7 @@ describe("Context Integration", () => {
       onReaderAttached: (reader) => events.push(reader),
     });
 
-    await delay(10);
+    await delay(0);
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].name, "ACR122U");
@@ -45,7 +45,7 @@ describe("Context Integration", () => {
       onCardInserted: (reader) => events.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].name, "ACR122U");
@@ -70,10 +70,10 @@ describe("Context Integration", () => {
       onCardRemoved: () => events.push("removed"),
     });
 
-    await delay(50);
+    await delay(0);
 
     mock.removeCard("ACR122U");
-    await delay(50);
+    await delay(0);
 
     assert(events.includes("inserted"));
     assert(events.includes("removed"));
@@ -97,7 +97,7 @@ describe("Context Integration", () => {
       onCardInserted: (reader) => cardEvents.push(reader.name),
     });
 
-    await delay(100);
+    await delay(0);
 
     assert.strictEqual(readerEvents.length, 2);
     assert(readerEvents.includes("Reader 1"));
@@ -123,10 +123,10 @@ describe("Context Integration", () => {
       onReaderDetached: () => events.push("detached"),
     });
 
-    await delay(10);
+    await delay(0);
 
     mock.detachReader("ACR122U");
-    await delay(10);
+    await delay(0);
 
     assert(events.includes("attached"));
     assert(events.includes("detached"));
@@ -141,7 +141,7 @@ describe("Context Integration", () => {
 
     const ctx = createContext({ _nativeContext: mock });
 
-    await delay(10);
+    await delay(0);
 
     assert.strictEqual(ctx.readers.size, 2);
     assert(ctx.readers.has("Reader 1"));
@@ -164,7 +164,7 @@ describe("Context Integration", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(cardEvents.length, 1);
     assert.strictEqual(cardEvents[0].connected, true);
@@ -187,10 +187,10 @@ describe("Context Integration", () => {
       onReaderChange: (reader, prevState) => stateChanges.push({ reader: reader.name, prevState }),
     });
 
-    await delay(10);
+    await delay(0);
 
     mock.insertCard("ACR122U", { atr: Buffer.from([0x3b]) });
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(stateChanges.length, 1);
     assert.strictEqual(stateChanges[0].reader, "ACR122U");
@@ -211,11 +211,303 @@ describe("Context Integration", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(cardEvents.length, 0);
     assert.strictEqual(ctx.readers.size, 1);
 
+    ctx.close();
+  });
+
+  it("should expose reader.protocol after connect", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]), protocol: SCARD_PROTOCOL_T1 });
+    const cardEvents = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await delay(0);
+
+    assert.strictEqual(cardEvents[0].protocol, SCARD_PROTOCOL_T1);
+    ctx.close();
+  });
+
+  it("should call reader.control() when connected", async () => {
+    const mock = createMockNative();
+    let controlArgs;
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onControl: async (code, data) => {
+        controlArgs = { code, data };
+        return Buffer.from([0x90, 0x00]);
+      },
+    });
+    const cardEvents = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await delay(0);
+
+    const result = await cardEvents[0].control(0x1234, Buffer.from([0x01]));
+    assert.strictEqual(controlArgs.code, 0x1234);
+    assert(result.equals(Buffer.from([0x90, 0x00])));
+    ctx.close();
+  });
+
+  it("should throw from reader.control() when not connected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+    let reader;
+    const ctx = createContext({
+      _nativeContext: mock,
+      onReaderAttached: (r) => {
+        reader = r;
+      },
+    });
+
+    await delay(0);
+
+    await assert.rejects(() => reader.control(0x1234), /Not connected/);
+    ctx.close();
+  });
+
+  it("should call reader.reconnect() when connected", async () => {
+    const mock = createMockNative();
+    let reconnectCalled = false;
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onReconnect: async () => {
+        reconnectCalled = true;
+      },
+    });
+    const cardEvents = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await delay(0);
+
+    await cardEvents[0].reconnect();
+    assert(reconnectCalled);
+    ctx.close();
+  });
+
+  it("should throw from reader.reconnect() when not connected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+    let reader;
+    const ctx = createContext({
+      _nativeContext: mock,
+      onReaderAttached: (r) => {
+        reader = r;
+      },
+    });
+
+    await delay(0);
+
+    await assert.rejects(() => reader.reconnect(), /Not connected/);
+    ctx.close();
+  });
+
+  it("should not throw from reader.disconnect() when already disconnected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+    let reader;
+    const ctx = createContext({
+      _nativeContext: mock,
+      onReaderAttached: (r) => {
+        reader = r;
+      },
+    });
+
+    await delay(0);
+
+    assert.doesNotThrow(() => reader.disconnect());
+    ctx.close();
+  });
+
+  it("should emit onCardRemoved when reader with connected card is detached", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
+    const events = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardRemoved: () => events.push("removed"),
+      onReaderDetached: () => events.push("detached"),
+    });
+
+    await delay(0);
+
+    mock.detachReader("ACR122U");
+    await delay(0);
+
+    assert.deepStrictEqual(events, ["removed", "detached"]);
+    ctx.close();
+  });
+
+  it("should call onError for error monitor events", async () => {
+    const mock = createMockNative();
+    const errors = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onError: (err) => errors.push(err),
+    });
+
+    mock.emitError("Something went wrong");
+    await delay(0);
+
+    assert.strictEqual(errors.length, 1);
+    assert(errors[0].message.includes("Something went wrong"));
+    ctx.close();
+  });
+
+  it("should not throw from close() if reader.disconnect() throws", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onDisconnect: () => {
+        throw new Error("Disconnect failed");
+      },
+    });
+    const cardEvents = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await delay(0);
+
+    assert.strictEqual(cardEvents[0].connected, true);
+    assert.doesNotThrow(() => ctx.close());
+  });
+
+  it("should not throw from close() if nativeContext.close() throws", async () => {
+    const mock = createMockNative();
+    mock.close = () => {
+      throw new Error("Close failed");
+    };
+    const ctx = createContext({ _nativeContext: mock });
+    assert.doesNotThrow(() => ctx.close());
+  });
+
+  it("should expose isValid on context", async () => {
+    const mock = createMockNative();
+    const ctx = createContext({ _nativeContext: mock });
+    assert.strictEqual(ctx.isValid, true);
+    ctx.close();
+    assert.strictEqual(ctx.isValid, false);
+  });
+
+  it("should not throw from close() if stopMonitor() throws", async () => {
+    const mock = createMockNative();
+    mock.stopMonitor = () => {
+      throw new Error("Stop failed");
+    };
+    const ctx = createContext({ _nativeContext: mock });
+    assert.doesNotThrow(() => ctx.close());
+  });
+
+  it("should swallow disconnect errors when reader is detached while connected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onDisconnect: () => {
+        throw new Error("Disconnect failed");
+      },
+    });
+    const events = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardRemoved: () => events.push("removed"),
+      onReaderDetached: () => events.push("detached"),
+    });
+
+    await delay(0);
+
+    mock.detachReader("ACR122U");
+    await delay(0);
+
+    assert.deepStrictEqual(events, ["removed", "detached"]);
+    ctx.close();
+  });
+
+  it("should ignore changed event for unknown reader", async () => {
+    const mock = createMockNative();
+    const ctx = createContext({ _nativeContext: mock });
+
+    // Emit a changed event for a reader name never attached
+    mock.emitChanged("Ghost Reader", 0x02, null);
+    await delay(0);
+
+    assert.strictEqual(ctx.readers.size, 0);
+    ctx.close();
+  });
+
+  it("should throw from reader.transmit() when not connected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+    let reader;
+    const ctx = createContext({
+      _nativeContext: mock,
+      onReaderAttached: (r) => {
+        reader = r;
+      },
+    });
+
+    await delay(0);
+
+    await assert.rejects(() => reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]), /Not connected/);
+    ctx.close();
+  });
+
+  it("should handle Buffer command with autoGetResponse", async () => {
+    const mock = createMockNative();
+    const nativeReader = mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onTransmit: responseMap([
+        { command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x01, 0x90, 0x00] },
+      ]),
+    });
+    const cardEvents = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardInserted: (reader) => cardEvents.push(reader),
+    });
+
+    await delay(0);
+
+    const cmd = Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]);
+    const response = await cardEvents[0].transmit(cmd, { autoGetResponse: true });
+    assert.strictEqual(nativeReader.transmitCount, 1);
+    assert(response.equals(Buffer.from([0x01, 0x90, 0x00])));
+    ctx.close();
+  });
+
+  it("should swallow disconnect errors when card is removed while connected", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      onDisconnect: () => {
+        throw new Error("Disconnect failed");
+      },
+    });
+    const events = [];
+    const ctx = createContext({
+      _nativeContext: mock,
+      onCardRemoved: () => events.push("removed"),
+    });
+
+    await delay(0);
+
+    mock.removeCard("ACR122U");
+    await delay(0);
+
+    assert.deepStrictEqual(events, ["removed"]);
     ctx.close();
   });
 });
@@ -241,7 +533,7 @@ describe("Protocol Fallback", () => {
       onError: (err) => errors.push(err),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(connectCalls, 2, "Should have called connect twice");
     assert.strictEqual(errors.length, 0, "Should not emit error");
@@ -268,7 +560,7 @@ describe("Protocol Fallback", () => {
       onError: (err) => errors.push(err),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(cardEvents.length, 0, "Should not emit card-inserted event");
     assert.strictEqual(errors.length, 1, "Should emit error");
@@ -298,7 +590,7 @@ describe("Auto GET RESPONSE", () => {
       _nativeContext: mock,
       onCardInserted: (reader) => cardEvents.push(reader),
     });
-    await delay(50);
+    await delay(0);
     const reader = cardEvents[0];
     try {
       return { response: await reader.transmit(command, options), nativeReader };
@@ -456,7 +748,7 @@ describe("reader.transmit() autoGetResponse option", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     assert.strictEqual(cardEvents.length, 1, "Should have card-inserted event");
     const reader = cardEvents[0];
@@ -495,7 +787,7 @@ describe("reader.transmit() autoGetResponse option", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     const reader = cardEvents[0];
     const response = await reader.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], {
@@ -524,7 +816,7 @@ describe("reader.transmit() autoGetResponse option", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     const reader = cardEvents[0];
     const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
@@ -559,7 +851,7 @@ describe("reader.transmit() autoGetResponse option", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     const reader = cardEvents[0];
     const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
@@ -588,7 +880,7 @@ describe("reader.transmit() autoGetResponse option", () => {
       onCardInserted: (reader) => cardEvents.push(reader),
     });
 
-    await delay(50);
+    await delay(0);
 
     const reader = cardEvents[0];
     const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {

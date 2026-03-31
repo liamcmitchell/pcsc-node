@@ -17,6 +17,18 @@ describe("Control Code Constants", () => {
     assert(code > 0);
   });
 
+  it("SCARD_CTL_CODE should use Windows formula on win32", () => {
+    const saved = /** @type {PropertyDescriptor} */ (
+      Object.getOwnPropertyDescriptor(process, "platform")
+    );
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    try {
+      assert.strictEqual(SCARD_CTL_CODE(3400), (0x31 << 16) + (3400 << 2));
+    } finally {
+      Object.defineProperty(process, "platform", saved);
+    }
+  });
+
   it("CM_IOCTL_GET_FEATURE_REQUEST should be defined", () => {
     assert.strictEqual(typeof CM_IOCTL_GET_FEATURE_REQUEST, "number");
     assert(CM_IOCTL_GET_FEATURE_REQUEST > 0);
