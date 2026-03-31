@@ -1,9 +1,247 @@
 #include "pcsc_reader.h"
 #include "pcsc_errors.h"
-#include "async_workers.h"
 #include <cstring>
 
 Napi::FunctionReference PCSCReader::constructor;
+
+// ============================================================================
+// Async Workers (private to this translation unit)
+// ============================================================================
+
+class ConnectWorker : public Napi::AsyncWorker {
+public:
+    ConnectWorker(Napi::Env env,
+                  PCSCReader* reader,
+                  DWORD shareMode,
+                  DWORD preferredProtocols,
+                  Napi::Promise::Deferred deferred)
+        : Napi::AsyncWorker(env),
+          reader_(reader),
+          shareMode_(shareMode),
+          preferredProtocols_(preferredProtocols),
+          card_(0),
+          activeProtocol_(0),
+          result_(SCARD_S_SUCCESS),
+          deferred_(deferred) {}
+
+    void Execute() override {
+        result_ = SCardConnect(
+            reader_->context_,
+            reader_->readerName_.c_str(),
+            shareMode_,
+            preferredProtocols_,
+            &card_,
+            &activeProtocol_
+        );
+    }
+
+    void OnOK() override {
+        Napi::Env env = Env();
+        if (result_ == SCARD_S_SUCCESS) {
+            reader_->card_ = card_;
+            reader_->protocol_ = activeProtocol_;
+            reader_->connected_ = true;
+            deferred_.Resolve(env.Undefined());
+        } else {
+            deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
+        }
+    }
+
+    void OnError(const Napi::Error& error) override {
+        deferred_.Reject(error.Value());
+    }
+
+private:
+    PCSCReader* reader_;
+    DWORD shareMode_;
+    DWORD preferredProtocols_;
+    SCARDHANDLE card_;
+    DWORD activeProtocol_;
+    LONG result_;
+    Napi::Promise::Deferred deferred_;
+};
+
+class TransmitWorker : public Napi::AsyncWorker {
+public:
+    TransmitWorker(Napi::Env env,
+                   SCARDHANDLE card,
+                   DWORD protocol,
+                   std::vector<uint8_t> sendBuffer,
+                   size_t maxRecvLength,
+                   Napi::Promise::Deferred deferred)
+        : Napi::AsyncWorker(env),
+          card_(card),
+          protocol_(protocol),
+          sendBuffer_(std::move(sendBuffer)),
+          recvLength_(0),
+          result_(SCARD_S_SUCCESS),
+          deferred_(deferred) {
+        size_t bufferSize = maxRecvLength;
+        if (bufferSize == 0) {
+            bufferSize = 258;
+        } else if (bufferSize > 262144) {
+            bufferSize = 262144;
+        }
+        recvBuffer_.resize(bufferSize);
+    }
+
+    void Execute() override {
+        const SCARD_IO_REQUEST* pioSendPci;
+        if (protocol_ == SCARD_PROTOCOL_T0) {
+            pioSendPci = SCARD_PCI_T0;
+        } else if (protocol_ == SCARD_PROTOCOL_T1) {
+            pioSendPci = SCARD_PCI_T1;
+        } else {
+            pioSendPci = SCARD_PCI_RAW;
+        }
+
+        recvLength_ = static_cast<DWORD>(recvBuffer_.size());
+
+        result_ = SCardTransmit(
+            card_,
+            pioSendPci,
+            sendBuffer_.data(),
+            static_cast<DWORD>(sendBuffer_.size()),
+            nullptr,
+            recvBuffer_.data(),
+            &recvLength_
+        );
+    }
+
+    void OnOK() override {
+        Napi::Env env = Env();
+        if (result_ == SCARD_S_SUCCESS) {
+            deferred_.Resolve(Napi::Buffer<uint8_t>::Copy(env, recvBuffer_.data(), recvLength_));
+        } else {
+            deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
+        }
+    }
+
+    void OnError(const Napi::Error& error) override {
+        deferred_.Reject(error.Value());
+    }
+
+private:
+    SCARDHANDLE card_;
+    DWORD protocol_;
+    std::vector<uint8_t> sendBuffer_;
+    std::vector<uint8_t> recvBuffer_;
+    DWORD recvLength_;
+    LONG result_;
+    Napi::Promise::Deferred deferred_;
+};
+
+class ControlWorker : public Napi::AsyncWorker {
+public:
+    ControlWorker(Napi::Env env,
+                  SCARDHANDLE card,
+                  DWORD controlCode,
+                  std::vector<uint8_t> sendBuffer,
+                  Napi::Promise::Deferred deferred)
+        : Napi::AsyncWorker(env),
+          card_(card),
+          controlCode_(controlCode),
+          sendBuffer_(std::move(sendBuffer)),
+          bytesReturned_(0),
+          result_(SCARD_S_SUCCESS),
+          deferred_(deferred) {
+        recvBuffer_.resize(256);
+    }
+
+    void Execute() override {
+        result_ = SCardControl(
+            card_,
+            controlCode_,
+            sendBuffer_.empty() ? nullptr : sendBuffer_.data(),
+            static_cast<DWORD>(sendBuffer_.size()),
+            recvBuffer_.data(),
+            static_cast<DWORD>(recvBuffer_.size()),
+            &bytesReturned_
+        );
+    }
+
+    void OnOK() override {
+        Napi::Env env = Env();
+        if (result_ == SCARD_S_SUCCESS) {
+            deferred_.Resolve(Napi::Buffer<uint8_t>::Copy(env, recvBuffer_.data(), bytesReturned_));
+        } else {
+            deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
+        }
+    }
+
+    void OnError(const Napi::Error& error) override {
+        deferred_.Reject(error.Value());
+    }
+
+private:
+    SCARDHANDLE card_;
+    DWORD controlCode_;
+    std::vector<uint8_t> sendBuffer_;
+    std::vector<uint8_t> recvBuffer_;
+    DWORD bytesReturned_;
+    LONG result_;
+    Napi::Promise::Deferred deferred_;
+};
+
+class ReconnectWorker : public Napi::AsyncWorker {
+public:
+    ReconnectWorker(Napi::Env env,
+                    SCARDHANDLE card,
+                    DWORD shareMode,
+                    DWORD preferredProtocols,
+                    DWORD initialization,
+                    DWORD* protocolOut,
+                    Napi::Promise::Deferred deferred)
+        : Napi::AsyncWorker(env),
+          card_(card),
+          shareMode_(shareMode),
+          preferredProtocols_(preferredProtocols),
+          initialization_(initialization),
+          activeProtocol_(0),
+          protocolOut_(protocolOut),
+          result_(SCARD_S_SUCCESS),
+          deferred_(deferred) {}
+
+    void Execute() override {
+        result_ = SCardReconnect(
+            card_,
+            shareMode_,
+            preferredProtocols_,
+            initialization_,
+            &activeProtocol_
+        );
+    }
+
+    void OnOK() override {
+        Napi::Env env = Env();
+        if (result_ == SCARD_S_SUCCESS) {
+            if (protocolOut_) {
+                *protocolOut_ = activeProtocol_;
+            }
+            deferred_.Resolve(env.Undefined());
+        } else {
+            deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
+        }
+    }
+
+    void OnError(const Napi::Error& error) override {
+        deferred_.Reject(error.Value());
+    }
+
+private:
+    SCARDHANDLE card_;
+    DWORD shareMode_;
+    DWORD preferredProtocols_;
+    DWORD initialization_;
+    DWORD activeProtocol_;
+    DWORD* protocolOut_;
+    LONG result_;
+    Napi::Promise::Deferred deferred_;
+};
+
+// ============================================================================
+// PCSCReader
+// ============================================================================
 
 Napi::Object PCSCReader::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "Reader", {
@@ -107,8 +345,7 @@ Napi::Value PCSCReader::Connect(const Napi::CallbackInfo& info) {
     Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
     ConnectWorker* worker = new ConnectWorker(
-        env, context_, readerName_, shareMode, preferredProtocols,
-        &card_, &protocol_, &connected_, deferred);
+        env, this, shareMode, preferredProtocols, deferred);
     worker->Queue();
 
     return deferred.Promise();

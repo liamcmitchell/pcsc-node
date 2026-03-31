@@ -1,7 +1,6 @@
 #include "pcsc_context.h"
 #include "pcsc_reader.h"
 #include "pcsc_errors.h"
-#include "async_workers.h"
 #include <cstring>
 #include <memory>
 

@@ -6,8 +6,7 @@
         "sources": [
             "src/addon.cpp",
             "src/pcsc_context.cpp",
-            "src/pcsc_reader.cpp",
-            "src/async_workers.cpp"
+            "src/pcsc_reader.cpp"
         ],
         "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include\")"
