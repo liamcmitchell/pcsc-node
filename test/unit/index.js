@@ -3,7 +3,8 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { createMockNative, responseMap, SCARD_PROTOCOL_T1 } from "../helpers/mock.js";
+import { createMockNative, responseMap } from "../helpers/mock.js";
+import { SCARD_PROTOCOL_T1 } from "../../lib/native.js";
 import { createContext } from "../../lib/context.js";
 import {
   PCSCError,

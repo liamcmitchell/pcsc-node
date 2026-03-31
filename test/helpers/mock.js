@@ -11,10 +11,7 @@
 /** @typedef {import('../../lib/native.js').NativeContext} NativeContext */
 /** @typedef {import('../../lib/native.js').NativeReader} NativeReader */
 
-// Standard PC/SC constants (WinSCard spec, never change)
-const SCARD_STATE_PRESENT = 0x0020;
-const SCARD_PROTOCOL_T0 = 0x0001;
-const SCARD_PROTOCOL_T1 = 0x0002;
+import { SCARD_STATE_PRESENT, SCARD_PROTOCOL_T0 } from "../../lib/native.js";
 
 /**
  * Create a response-map based transmit handler.
@@ -240,4 +237,4 @@ function createMockNative() {
   };
 }
 
-export { createMockNative, responseMap, SCARD_PROTOCOL_T0, SCARD_PROTOCOL_T1 };
+export { createMockNative, responseMap };
