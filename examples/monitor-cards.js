@@ -7,35 +7,32 @@
  * Press Ctrl+C to stop monitoring.
  */
 
-import { createClient } from "../lib/index.js";
+import { createContext } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
 console.log("==================");
 console.log("Monitoring for card events. Press Ctrl+C to stop.\n");
 
-const client = createClient({
-  onReaderAttached({ name }) {
-    console.log(`[+] Reader attached: ${name}`);
+const context = createContext({
+  onReaderAttached(reader) {
+    console.log(`[+] Reader attached: ${reader.name}`);
   },
 
-  onReaderDetached({ name }) {
-    console.log(`[-] Reader detached: ${name}`);
+  onReaderDetached(reader) {
+    console.log(`[-] Reader detached: ${reader.name}`);
   },
 
-  async onCardInserted({ name, card }) {
-    console.log(`\n[*] Card inserted in: ${name}`);
+  async onCardInserted(reader) {
+    console.log(`\n[*] Card inserted in: ${reader.name}`);
 
     // Get ATR
-    try {
-      const status = card.getStatus();
-      console.log(`    ATR: ${status.atr.toString("hex")}`);
-    } catch (err) {
-      console.log(`    Could not get ATR: ${err.message}`);
+    if (reader.atr) {
+      console.log(`    ATR: ${reader.atr.toString("hex")}`);
     }
 
     // Try to read UID
     try {
-      const response = await card.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
+      const response = await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
       if (response.length >= 2) {
         const sw1 = response[response.length - 2];
         const sw2 = response[response.length - 1];
@@ -51,8 +48,8 @@ const client = createClient({
     console.log();
   },
 
-  onCardRemoved({ name }) {
-    console.log(`[*] Card removed from: ${name}\n`);
+  onCardRemoved(reader) {
+    console.log(`[*] Card removed from: ${reader.name}\n`);
   },
 
   onError(err) {
@@ -64,17 +61,14 @@ const client = createClient({
   },
 });
 
-// Start monitoring
-client.start();
-
 // Handle shutdown
 process.on("SIGINT", () => {
   console.log("\nStopping...");
-  client.stop();
+  context.close();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
-  client.stop();
+  context.close();
   process.exit(0);
 });
