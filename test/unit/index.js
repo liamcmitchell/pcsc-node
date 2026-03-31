@@ -33,7 +33,7 @@ describe("Context Integration", () => {
   it("should call onReaderAttached callback with reader object", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
-    /** @type {import('../../lib/types.js').Reader[]} */
+    /** @type {import('../../lib/context.js').Reader[]} */
     const events = [];
 
     const ctx = createContext({
@@ -60,7 +60,7 @@ describe("Context Integration", () => {
       ]),
     });
 
-    /** @type {import('../../lib/types.js').Reader[]} */
+    /** @type {import('../../lib/context.js').Reader[]} */
     const events = [];
 
     const ctx = createContext({
@@ -179,7 +179,7 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../../lib/types.js').Reader[]} */
+    /** @type {import('../../lib/context.js').Reader[]} */
     const cardEvents = [];
 
     const ctx = createContext({
@@ -225,7 +225,7 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../../lib/types.js').Reader[]} */
+    /** @type {import('../../lib/context.js').Reader[]} */
     const cardEvents = [];
 
     const ctx = createContext({
@@ -514,7 +514,7 @@ describe("Auto GET RESPONSE", () => {
   /**
    * @param {Array<{command: number[], response: number[]}>} cardResponses
    * @param {number[]} command
-   * @param {import('../../lib/types.js').TransmitOptions} [options]
+   * @param {import('../../lib/context.js').TransmitOptions} [options]
    */
   async function transmitViaReader(cardResponses, command, options) {
     const mock = createMockNative();
