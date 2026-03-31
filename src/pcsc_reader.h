@@ -5,10 +5,7 @@
 #include <vector>
 #include "platform/pcsc.h"
 
-class ConnectWorker;
-
 class PCSCReader : public Napi::ObjectWrap<PCSCReader> {
-    friend class ::ConnectWorker;
 public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     static Napi::Object NewInstance(Napi::Env env, SCARDCONTEXT context,
