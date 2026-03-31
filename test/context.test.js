@@ -198,7 +198,7 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("should not auto-connect when autoConnect is false", async () => {
+  it("should fire onCardInserted but not connect when autoConnect is false", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
@@ -213,7 +213,8 @@ describe("Context Integration", () => {
 
     await delay(0);
 
-    assert.strictEqual(cardEvents.length, 0);
+    assert.strictEqual(cardEvents.length, 1);
+    assert.strictEqual(cardEvents[0].connected, false);
     assert.strictEqual(ctx.readers.size, 1);
 
     ctx.close();
