@@ -153,7 +153,7 @@ function createMockNative() {
       for (const [name, data] of readers) {
         callback({
           type: "attached",
-          reader: name,
+          name,
           state: data.state,
           atr: data.nativeReader.atr,
           nativeReader: data.nativeReader,
@@ -182,7 +182,7 @@ function createMockNative() {
       const state = hasCard ? 0x02 | SCARD_STATE_PRESENT : 0x02;
       const nativeReader = createMockNativeReader(name, opts);
       readers.set(name, { nativeReader, state });
-      emit({ type: "attached", reader: name, state, atr: nativeReader.atr, nativeReader });
+      emit({ type: "attached", name, state, atr: nativeReader.atr, nativeReader });
       return nativeReader;
     },
 
@@ -192,7 +192,7 @@ function createMockNative() {
      */
     detachReader(name) {
       readers.delete(name);
-      emit({ type: "detached", reader: name, state: 0, atr: null });
+      emit({ type: "detached", name, state: 0, atr: null });
     },
 
     /**
@@ -223,7 +223,7 @@ function createMockNative() {
       if (onDisconnect) nr.onDisconnect = onDisconnect;
       if (onReconnect) nr.onReconnect = onReconnect;
       data.state = 0x02 | SCARD_STATE_PRESENT;
-      emit({ type: "changed", reader: name, state: data.state, atr });
+      emit({ type: "changed", name, state: data.state, atr });
     },
 
     /**
@@ -235,7 +235,7 @@ function createMockNative() {
       if (!data) return;
       data.nativeReader._setAtr(null);
       data.state = 0x02;
-      emit({ type: "changed", reader: name, state: data.state, atr: null });
+      emit({ type: "changed", name, state: data.state, atr: null });
     },
   };
 }
