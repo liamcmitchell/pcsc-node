@@ -1,32 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import { createMockNative, responseMap } from "../helpers/mock.js";
-import { SCARD_PROTOCOL_T1 } from "../../lib/native.js";
-import { createContext } from "../../lib/context.js";
-import {
-  PCSCError,
-  CardRemovedError,
-  TimeoutError,
-  NoReadersError,
-  ServiceNotRunningError,
-  SharingViolationError,
-  createPCSCError,
-} from "../../lib/errors.js";
-import {
-  SCARD_CTL_CODE,
-  CM_IOCTL_GET_FEATURE_REQUEST,
-  FEATURE_VERIFY_PIN_DIRECT,
-  FEATURE_MODIFY_PIN_DIRECT,
-  FEATURE_IFD_PIN_PROPERTIES,
-  FEATURE_GET_TLV_PROPERTIES,
-  parseFeatures,
-} from "../../lib/control-codes.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { createMockNative, responseMap } from "./context.helpers.js";
+import { SCARD_PROTOCOL_T1 } from "../lib/native.js";
+import { createContext } from "../lib/context.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -34,7 +10,7 @@ describe("Context Integration", () => {
   it("should call onReaderAttached callback with reader object", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U");
-    /** @type {import('../../lib/context.js').Reader[]} */
+    /** @type {import('../lib/context.js').Reader[]} */
     const events = [];
 
     const ctx = createContext({
@@ -61,7 +37,7 @@ describe("Context Integration", () => {
       ]),
     });
 
-    /** @type {import('../../lib/context.js').Reader[]} */
+    /** @type {import('../lib/context.js').Reader[]} */
     const events = [];
 
     const ctx = createContext({
@@ -180,7 +156,7 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../../lib/context.js').Reader[]} */
+    /** @type {import('../lib/context.js').Reader[]} */
     const cardEvents = [];
 
     const ctx = createContext({
@@ -226,7 +202,7 @@ describe("Context Integration", () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
-    /** @type {import('../../lib/context.js').Reader[]} */
+    /** @type {import('../lib/context.js').Reader[]} */
     const cardEvents = [];
 
     const ctx = createContext({
@@ -305,217 +281,11 @@ describe("Protocol Fallback", () => {
   });
 });
 
-describe("Error Classes", () => {
-  it("PCSCError should have code property", () => {
-    const err = new PCSCError("Test error", 0x80100001);
-    assert.strictEqual(err.code, 0x80100001);
-    assert.strictEqual(err.name, "PCSCError");
-    assert.strictEqual(err.message, "Test error");
-  });
-
-  it("CardRemovedError should have correct code", () => {
-    const err = new CardRemovedError();
-    assert.strictEqual(err.code, 0x80100069);
-    assert.strictEqual(err.name, "CardRemovedError");
-    assert(err instanceof PCSCError);
-  });
-
-  it("TimeoutError should have correct code", () => {
-    const err = new TimeoutError();
-    assert.strictEqual(err.code, 0x8010000a);
-    assert.strictEqual(err.name, "TimeoutError");
-    assert(err instanceof PCSCError);
-  });
-
-  it("NoReadersError should have correct code", () => {
-    const err = new NoReadersError();
-    assert.strictEqual(err.code, 0x8010002e);
-    assert.strictEqual(err.name, "NoReadersError");
-    assert(err instanceof PCSCError);
-  });
-
-  it("ServiceNotRunningError should have correct code", () => {
-    const err = new ServiceNotRunningError();
-    assert.strictEqual(err.code, 0x8010001d);
-    assert.strictEqual(err.name, "ServiceNotRunningError");
-    assert(err instanceof PCSCError);
-  });
-
-  it("SharingViolationError should have correct code", () => {
-    const err = new SharingViolationError();
-    assert.strictEqual(err.code, 0x8010000b);
-    assert.strictEqual(err.name, "SharingViolationError");
-    assert(err instanceof PCSCError);
-  });
-
-  it("createPCSCError should return CardRemovedError for 0x80100069", () => {
-    const err = createPCSCError("Card was removed", 0x80100069);
-    assert(err instanceof CardRemovedError);
-    assert.strictEqual(err.code, 0x80100069);
-  });
-
-  it("createPCSCError should return TimeoutError for 0x8010000A", () => {
-    const err = createPCSCError("Timeout", 0x8010000a);
-    assert(err instanceof TimeoutError);
-    assert.strictEqual(err.code, 0x8010000a);
-  });
-
-  it("createPCSCError should return NoReadersError for 0x8010002E", () => {
-    const err = createPCSCError("No readers", 0x8010002e);
-    assert(err instanceof NoReadersError);
-    assert.strictEqual(err.code, 0x8010002e);
-  });
-
-  it("createPCSCError should return ServiceNotRunningError for 0x8010001D", () => {
-    const err = createPCSCError("Service not running", 0x8010001d);
-    assert(err instanceof ServiceNotRunningError);
-    assert.strictEqual(err.code, 0x8010001d);
-  });
-
-  it("createPCSCError should return SharingViolationError for 0x8010000B", () => {
-    const err = createPCSCError("Sharing violation", 0x8010000b);
-    assert(err instanceof SharingViolationError);
-    assert.strictEqual(err.code, 0x8010000b);
-  });
-
-  it("createPCSCError should return PCSCError for unknown codes", () => {
-    const err = createPCSCError("Unknown error", 0x80100099);
-    assert(err instanceof PCSCError);
-    assert(!(err instanceof CardRemovedError));
-    assert.strictEqual(err.code, 0x80100099);
-  });
-});
-
-describe("Control Code Constants", () => {
-  it("SCARD_CTL_CODE should generate correct control codes", () => {
-    const code = SCARD_CTL_CODE(3400);
-    assert.strictEqual(typeof code, "number");
-    assert(code > 0);
-  });
-
-  it("CM_IOCTL_GET_FEATURE_REQUEST should be defined", () => {
-    assert.strictEqual(typeof CM_IOCTL_GET_FEATURE_REQUEST, "number");
-    assert(CM_IOCTL_GET_FEATURE_REQUEST > 0);
-  });
-
-  it("FEATURE constants should have correct values", () => {
-    assert.strictEqual(FEATURE_VERIFY_PIN_DIRECT, 0x06);
-    assert.strictEqual(FEATURE_MODIFY_PIN_DIRECT, 0x07);
-    assert.strictEqual(FEATURE_IFD_PIN_PROPERTIES, 0x0a);
-    assert.strictEqual(FEATURE_GET_TLV_PROPERTIES, 0x12);
-  });
-});
-
-describe("parseFeatures", () => {
-  it("should return empty map for empty buffer", () => {
-    const features = parseFeatures(Buffer.alloc(0));
-    assert(features instanceof Map, "Should return a Map");
-    assert.strictEqual(features.size, 0, "Map should be empty");
-  });
-
-  it("should parse single feature TLV", () => {
-    const tlv = Buffer.from([0x06, 0x04, 0x42, 0x00, 0x0d, 0x48]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 1, "Should have one feature");
-    assert(features.has(FEATURE_VERIFY_PIN_DIRECT), "Should have VERIFY_PIN_DIRECT");
-    assert.strictEqual(features.get(FEATURE_VERIFY_PIN_DIRECT), 0x42000d48);
-  });
-
-  it("should parse multiple feature TLVs", () => {
-    const tlv = Buffer.from([
-      0x06, 0x04, 0x42, 0x00, 0x0d, 0x48, 0x07, 0x04, 0x42, 0x00, 0x0d, 0x4c,
-    ]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 2, "Should have two features");
-    assert.strictEqual(features.get(FEATURE_VERIFY_PIN_DIRECT), 0x42000d48);
-    assert.strictEqual(features.get(FEATURE_MODIFY_PIN_DIRECT), 0x42000d4c);
-  });
-
-  it("should skip TLVs with non-4-byte length", () => {
-    const tlv = Buffer.from([0x06, 0x02, 0x00, 0x00, 0x07, 0x04, 0x42, 0x00, 0x0d, 0x4c]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 1, "Should have one feature (skipped invalid)");
-    assert(!features.has(FEATURE_VERIFY_PIN_DIRECT), "Should not have skipped feature");
-    assert(features.has(FEATURE_MODIFY_PIN_DIRECT), "Should have valid feature");
-  });
-
-  it("should handle truncated buffer gracefully", () => {
-    const tlv = Buffer.from([0x06, 0x04, 0x42]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 0, "Should return empty map for truncated buffer");
-  });
-
-  it("should handle buffer shorter than minimum TLV", () => {
-    const tlv = Buffer.from([0x06, 0x04]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 0, "Should return empty map");
-  });
-
-  it("should parse real-world CCID response", () => {
-    const tlv = Buffer.from([
-      0x06, 0x04, 0x42, 0x33, 0x00, 0x06, 0x07, 0x04, 0x42, 0x33, 0x00, 0x07, 0x0a, 0x04, 0x42,
-      0x33, 0x00, 0x0a, 0x12, 0x04, 0x42, 0x33, 0x00, 0x12,
-    ]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 4, "Should have 4 features");
-    assert.strictEqual(features.get(0x06), 0x42330006);
-    assert.strictEqual(features.get(0x07), 0x42330007);
-    assert.strictEqual(features.get(0x0a), 0x4233000a);
-    assert.strictEqual(features.get(0x12), 0x42330012);
-  });
-
-  it("should not read beyond buffer with malformed length field", () => {
-    const tlv = Buffer.from([0x06, 0xff, 0x42, 0x00, 0x0d, 0x48]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 0, "Should return empty map for malformed length");
-  });
-
-  it("should handle length that exactly exceeds remaining bytes", () => {
-    const tlv = Buffer.from([0x06, 0x06, 0x42, 0x00, 0x0d, 0x48]);
-    const features = parseFeatures(tlv);
-
-    assert.strictEqual(features.size, 0, "Should skip non-4 length entries");
-  });
-});
-
-describe("Package Exports", () => {
-  const packageJsonPath = resolve(__dirname, "../../package.json");
-
-  it("should have exports field with main and native entries", () => {
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-
-    assert(packageJson.exports, "exports field should exist");
-    assert.strictEqual(
-      packageJson.exports["."],
-      "./lib/index.js",
-      'exports["."] should point to lib/index.js',
-    );
-    assert.strictEqual(
-      packageJson.exports["./native"],
-      "./lib/native.js",
-      'exports["./native"] should point to lib/native.js',
-    );
-  });
-
-  it("should have type: module for ESM", () => {
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-
-    assert.strictEqual(packageJson.type, "module", 'type should be "module" for ESM');
-  });
-});
-
 describe("Auto GET RESPONSE", () => {
   /**
    * @param {Array<{command: number[], response: number[]}>} cardResponses
    * @param {number[]} command
-   * @param {import('../../lib/context.js').TransmitOptions} [options]
+   * @param {import('../lib/context.js').TransmitOptions} [options]
    */
   async function transmitViaReader(cardResponses, command, options) {
     const mock = createMockNative();

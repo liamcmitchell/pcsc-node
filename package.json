@@ -46,8 +46,8 @@
   "scripts": {
     "install": "node-gyp rebuild",
     "rebuild": "node-gyp rebuild",
-    "test": "node --test test/unit/index.js",
-    "test:coverage": "c8 --include=lib/**/*.js node --test test/unit/index.js",
+    "test": "node --test 'test/*.test.js'",
+    "test:coverage": "c8 --include=lib/**/*.js node --test 'test/*.test.js'",
     "typecheck": "tsc",
     "coverage:report": "c8 report --reporter=text --reporter=html",
     "lint": "oxlint",
