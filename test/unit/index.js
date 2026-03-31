@@ -85,24 +85,13 @@ describe("MockCard", () => {
     });
   });
 
-  it("should get card status", () => {
-    const atr = Buffer.from([0x3b, 0x8f]);
-    const card = new MockCard(2, atr);
-
-    const status = card.getStatus();
-    assert.strictEqual(status.protocol, 2);
-    assert(status.atr.equals(atr));
-    assert.strictEqual(typeof status.state, "number");
-  });
-
   it("should reconnect card async", async () => {
     const card = new MockCard(1, Buffer.from([0x3b]));
     card.disconnect();
     assert.strictEqual(card.connected, false);
 
-    const protocol = await card.reconnect();
+    await card.reconnect();
     assert.strictEqual(card.connected, true);
-    assert.strictEqual(protocol, 1);
   });
 
   it("should update protocol after reconnect with different protocol", async () => {
@@ -110,9 +99,8 @@ describe("MockCard", () => {
     assert.strictEqual(card.protocol, 1);
 
     card.setReconnectProtocol(2);
-    const newProtocol = await card.reconnect();
+    await card.reconnect();
 
-    assert.strictEqual(newProtocol, 2, "reconnect should return new protocol");
     assert.strictEqual(card.protocol, 2, "card.protocol should be updated after reconnect");
   });
 

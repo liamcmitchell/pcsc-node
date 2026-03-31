@@ -214,11 +214,10 @@ void ReconnectWorker::OnOK() {
     Napi::Env env = Env();
 
     if (result_ == SCARD_S_SUCCESS) {
-        // Update the card object's protocol
         if (protocolOut_) {
             *protocolOut_ = activeProtocol_;
         }
-        deferred_.Resolve(Napi::Number::New(env, activeProtocol_));
+        deferred_.Resolve(env.Undefined());
     } else {
         deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
     }

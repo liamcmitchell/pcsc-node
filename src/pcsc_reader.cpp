@@ -14,7 +14,6 @@ Napi::Object PCSCReader::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("connect", &PCSCReader::Connect),
         InstanceMethod("transmit", &PCSCReader::Transmit),
         InstanceMethod("control", &PCSCReader::Control),
-        InstanceMethod("getStatus", &PCSCReader::GetStatus),
         InstanceMethod("disconnect", &PCSCReader::Disconnect),
         InstanceMethod("reconnect", &PCSCReader::Reconnect),
     });
@@ -71,7 +70,6 @@ Napi::Value PCSCReader::GetAtr(const Napi::CallbackInfo& info) {
         return env.Null();
     }
 
-    // Get ATR via SCardStatus
     DWORD readerLen = 0;
     DWORD state = 0;
     DWORD protocol = 0;
@@ -145,8 +143,7 @@ Napi::Value PCSCReader::Transmit(const Napi::CallbackInfo& info) {
         return env.Null();
     }
 
-    // Parse options (optional second argument)
-    size_t maxRecvLength = 0;  // 0 means use default
+    size_t maxRecvLength = 0;
     if (info.Length() > 1 && info[1].IsObject()) {
         Napi::Object options = info[1].As<Napi::Object>();
         if (options.Has("maxRecvLength") && options.Get("maxRecvLength").IsNumber()) {
@@ -154,7 +151,6 @@ Napi::Value PCSCReader::Transmit(const Napi::CallbackInfo& info) {
         }
     }
 
-    // Create promise for async transmit
     Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
     TransmitWorker* worker = new TransmitWorker(
@@ -193,7 +189,6 @@ Napi::Value PCSCReader::Control(const Napi::CallbackInfo& info) {
         }
     }
 
-    // Create promise for async control
     Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
     ControlWorker* worker = new ControlWorker(
@@ -201,36 +196,6 @@ Napi::Value PCSCReader::Control(const Napi::CallbackInfo& info) {
     worker->Queue();
 
     return deferred.Promise();
-}
-
-Napi::Value PCSCReader::GetStatus(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    if (!connected_) {
-        Napi::Error::New(env, "Card is not connected").ThrowAsJavaScriptException();
-        return env.Null();
-    }
-
-    DWORD readerLen = 0;
-    DWORD state = 0;
-    DWORD protocol = 0;
-    BYTE atr[MAX_ATR_SIZE];
-    DWORD atrLen = sizeof(atr);
-
-    // First call to get reader name length
-    LONG result = SCardStatus(card_, nullptr, &readerLen, &state, &protocol, atr, &atrLen);
-
-    if (result != SCARD_S_SUCCESS) {
-        Napi::Error::New(env, GetPCSCErrorString(result)).ThrowAsJavaScriptException();
-        return env.Null();
-    }
-
-    Napi::Object status = Napi::Object::New(env);
-    status.Set("state", Napi::Number::New(env, state));
-    status.Set("protocol", Napi::Number::New(env, protocol));
-    status.Set("atr", Napi::Buffer<uint8_t>::Copy(env, atr, atrLen));
-
-    return status;
 }
 
 Napi::Value PCSCReader::Disconnect(const Napi::CallbackInfo& info) {
@@ -278,7 +243,6 @@ Napi::Value PCSCReader::Reconnect(const Napi::CallbackInfo& info) {
         initialization = info[2].As<Napi::Number>().Uint32Value();
     }
 
-    // Create promise for async reconnect
     Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
     ReconnectWorker* worker = new ReconnectWorker(

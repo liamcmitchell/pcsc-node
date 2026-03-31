@@ -470,7 +470,6 @@ void PCSCContext::EmitEvent(const std::string& eventType, const std::string& rea
             event.Set("atr", env.Null());
         }
 
-        // For attached events, create a native Reader object
         if (ptr->eventType == "attached") {
             event.Set("nativeReader", PCSCReader::NewInstance(env, ptr->context, ptr->readerName));
         }

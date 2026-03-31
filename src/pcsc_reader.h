@@ -15,7 +15,7 @@ public:
     ~PCSCReader();
 
     // Accessors
-    SCARDHANDLE GetHandle() const { return card_; }
+    SCARDHANDLE GetCard() const { return card_; }
     DWORD GetProtocol() const { return protocol_; }
     bool IsConnected() const { return connected_; }
 
@@ -32,7 +32,6 @@ private:
     Napi::Value Connect(const Napi::CallbackInfo& info);
     Napi::Value Transmit(const Napi::CallbackInfo& info);
     Napi::Value Control(const Napi::CallbackInfo& info);
-    Napi::Value GetStatus(const Napi::CallbackInfo& info);
     Napi::Value Disconnect(const Napi::CallbackInfo& info);
     Napi::Value Reconnect(const Napi::CallbackInfo& info);
 

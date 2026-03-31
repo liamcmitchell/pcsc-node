@@ -123,7 +123,7 @@ class MockCard {
    * @param {number} [_shareMode]
    * @param {number} [_protocol]
    * @param {number} [_init]
-   * @returns {Promise<number>}
+   * @returns {Promise<void>}
    */
   async reconnect(_shareMode, _protocol, _init) {
     this._connected = true;
@@ -131,7 +131,6 @@ class MockCard {
       this._protocol = this._reconnectProtocol;
       this._reconnectProtocol = null;
     }
-    return this._protocol;
   }
 }
 
@@ -214,7 +213,7 @@ class MockContext {
    * The mock reader delegates connect() back to this.connect()
    * so tests can override connect behavior on the context.
    * @param {string} readerName
-   * @returns {{ name: string; connected: boolean; protocol: number; atr: Buffer | null; connect: Function; transmit: Function; control: Function; getStatus: Function; disconnect: Function; reconnect: Function }}
+   * @returns {{ name: string; connected: boolean; protocol: number; atr: Buffer | null; connect: Function; transmit: Function; control: Function; disconnect: Function; reconnect: Function }}
    */
   _createNativeReader(readerName) {
     const self = this;
@@ -267,12 +266,6 @@ class MockContext {
         return card.control(code, data);
       },
 
-      /** @returns {import('../../lib/types.js').CardStatus} */
-      getStatus() {
-        if (!nativeReader._connected || !card) throw new Error("Card is not connected");
-        return card.getStatus();
-      },
-
       /** @param {number} [disposition] */
       disconnect(_disposition) {
         if (!nativeReader._connected) return;
@@ -286,13 +279,12 @@ class MockContext {
        * @param {number} [shareMode]
        * @param {number} [protocol]
        * @param {number} [init]
-       * @returns {Promise<number>}
+       * @returns {Promise<void>}
        */
       async reconnect(shareMode, protocol, init) {
         if (!nativeReader._connected || !card) throw new Error("Card is not connected");
-        const result = await card.reconnect(shareMode, protocol, init);
+        await card.reconnect(shareMode, protocol, init);
         nativeReader._protocol = card.protocol;
-        return result;
       },
     };
 
