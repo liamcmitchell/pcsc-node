@@ -48,7 +48,7 @@
     "rebuild": "node-gyp rebuild",
     "test": "node --test test/unit/index.js",
     "test:coverage": "c8 --include=lib/**/*.js node --test test/unit/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc",
     "coverage:report": "c8 report --reporter=text --reporter=html",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
