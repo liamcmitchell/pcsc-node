@@ -448,7 +448,7 @@ void PCSCContext::EmitEvent(const std::string& eventType, const std::string& rea
 
         Napi::Object event = Napi::Object::New(env);
         event.Set("type", Napi::String::New(env, ptr->eventType));
-        event.Set("reader", Napi::String::New(env, ptr->readerName));
+        event.Set("name", Napi::String::New(env, ptr->readerName));
         event.Set("state", Napi::Number::New(env, ptr->state));
 
         if (!ptr->atr.empty()) {
