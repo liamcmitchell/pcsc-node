@@ -33,6 +33,7 @@ private:
         DWORD lastState;
         std::vector<uint8_t> atr;
         bool announced;
+        bool seenInScan;
     };
     std::unordered_map<std::string, ReaderInfo> readerStates_;
 

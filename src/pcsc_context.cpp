@@ -161,47 +161,44 @@ void PCSCContext::MonitorLoop() {
         if (checkReaders) {
             std::vector<std::string> detachedNames;
 
+            for (auto& pair : readerStates_) {
+                pair.second.seenInScan = false;
+            }
+
             DWORD readersLen = 0;
             LONG listResult = SCardListReaders(context_, nullptr, nullptr, &readersLen);
 
-            const auto previousStates = readerStates_;
-
             if (listResult == static_cast<LONG>(SCARD_E_NO_READERS_AVAILABLE) || readersLen == 0) {
+                for (const auto& pair : readerStates_) {
+                    detachedNames.push_back(pair.first);
+                }
                 readerStates_.clear();
             } else if (listResult == SCARD_S_SUCCESS) {
                 std::vector<char> buffer(readersLen);
                 listResult = SCardListReaders(context_, nullptr, buffer.data(), &readersLen);
 
                 if (listResult == SCARD_S_SUCCESS) {
-                    std::vector<std::string> newNames;
                     const char* p = buffer.data();
                     while (*p != '\0') {
-                        newNames.push_back(std::string(p));
+                        std::string name(p);
+                        auto [it, inserted] = readerStates_.try_emplace(name, ReaderInfo{});
+                        if (inserted) {
+                            it->second.lastState = SCARD_STATE_UNAWARE;
+                            it->second.atr.clear();
+                            it->second.announced = false;
+                        }
+                        it->second.seenInScan = true;
                         p += strlen(p) + 1;
                     }
 
-                    std::unordered_map<std::string, ReaderInfo> updatedStates;
-                    for (const auto& name : newNames) {
-                        ReaderInfo info = {};
-                        auto previousIt = previousStates.find(name);
-                        if (previousIt != previousStates.end()) {
-                            info = previousIt->second;
+                    for (auto it = readerStates_.begin(); it != readerStates_.end();) {
+                        if (!it->second.seenInScan) {
+                            detachedNames.push_back(it->first);
+                            it = readerStates_.erase(it);
                         } else {
-                            info.lastState = SCARD_STATE_UNAWARE;
-                            info.atr.clear();
-                            info.announced = false;
+                            ++it;
                         }
-
-                        updatedStates[name] = info;
                     }
-
-                    readerStates_.swap(updatedStates);
-                }
-            }
-
-            for (const auto& oldPair : previousStates) {
-                if (readerStates_.find(oldPair.first) == readerStates_.end()) {
-                    detachedNames.push_back(oldPair.first);
                 }
             }
 
@@ -221,6 +218,7 @@ void PCSCContext::MonitorLoop() {
             readerNames.push_back(pair.first);
             state.szReader = readerNames.back().c_str();
             state.dwCurrentState = pair.second.lastState;
+            state.pvUserData = const_cast<ReaderInfo*>(&pair.second);
             states.push_back(state);
         }
 
@@ -229,6 +227,7 @@ void PCSCContext::MonitorLoop() {
             SCARD_READERSTATE pnpState = {};
             pnpState.szReader = readerNames.back().c_str();
             pnpState.dwCurrentState = pnpCurrentState;
+            pnpState.pvUserData = nullptr;
             states.push_back(pnpState);
         }
 
@@ -279,31 +278,32 @@ void PCSCContext::MonitorLoop() {
             }
 
             LogPcscState(readerName, states[i].dwEventState);
-            auto it = readerStates_.find(readerName);
+            auto* info = static_cast<ReaderInfo*>(states[i].pvUserData);
+            if (info == nullptr) {
+                continue;
+            }
 
-            if (it != readerStates_.end()) {
-                DWORD newState = states[i].dwEventState & ~SCARD_STATE_CHANGED;
+            DWORD newState = states[i].dwEventState & ~SCARD_STATE_CHANGED;
 
-                std::vector<uint8_t> atr;
-                if (states[i].cbAtr > 0) {
-                    atr.assign(states[i].rgbAtr, states[i].rgbAtr + states[i].cbAtr);
-                }
+            std::vector<uint8_t> atr;
+            if (states[i].cbAtr > 0) {
+                atr.assign(states[i].rgbAtr, states[i].rgbAtr + states[i].cbAtr);
+            }
 
-                const DWORD prevState = it->second.lastState;
-                it->second.lastState = newState;
-                it->second.atr = atr;
+            const DWORD prevState = info->lastState;
+            info->lastState = newState;
+            info->atr = atr;
 
-                const bool wasUnresolved =
-                    prevState == SCARD_STATE_UNAWARE || (prevState & SCARD_STATE_UNKNOWN) != 0;
-                const bool isResolved =
-                    newState != SCARD_STATE_UNAWARE && (newState & SCARD_STATE_UNKNOWN) == 0;
+            const bool wasUnresolved =
+                prevState == SCARD_STATE_UNAWARE || (prevState & SCARD_STATE_UNKNOWN) != 0;
+            const bool isResolved =
+                newState != SCARD_STATE_UNAWARE && (newState & SCARD_STATE_UNKNOWN) == 0;
 
-                if (!it->second.announced && wasUnresolved && isResolved) {
-                    it->second.announced = true;
-                    EmitEvent("attached", readerName, newState, atr);
-                } else if (it->second.announced && newState != prevState) {
-                    EmitEvent("changed", readerName, newState, atr);
-                }
+            if (!info->announced && wasUnresolved && isResolved) {
+                info->announced = true;
+                EmitEvent("attached", readerName, newState, atr);
+            } else if (info->announced && newState != prevState) {
+                EmitEvent("changed", readerName, newState, atr);
             }
         }
 

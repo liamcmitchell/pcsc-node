@@ -145,6 +145,37 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
+  it("should reuse the same reader object when detached and reattached", async () => {
+    const mock = createMockNative();
+    const attached = [];
+    const readerAttachEvents = [];
+    const ctx = startContext({
+      _nativeContext: mock,
+      attach: (reader) => {
+        attached.push(reader);
+        if (attached.length === 1) {
+          reader.on("attach", (r) => readerAttachEvents.push(r));
+        }
+      },
+    });
+
+    mock.attachReader("ACR122U");
+    await delay(0);
+    mock.detachReader("ACR122U");
+    await delay(0);
+    mock.attachReader("ACR122U");
+    await delay(0);
+
+    assert.strictEqual(attached.length, 2);
+    assert.strictEqual(attached[0], attached[1]);
+    assert.strictEqual(ctx.readers.get("ACR122U"), attached[0]);
+    assert.strictEqual(readerAttachEvents.length, 2);
+    assert.strictEqual(readerAttachEvents[0], attached[0]);
+    assert.strictEqual(readerAttachEvents[1], attached[0]);
+
+    ctx.close();
+  });
+
   it("should track readers in context.readers map", async () => {
     const mock = createMockNative();
     mock.attachReader("Reader 1");
