@@ -5,7 +5,6 @@
 #include <vector>
 #include <thread>
 #include <atomic>
-#include <mutex>
 #include <unordered_map>
 #include "platform/pcsc.h"
 
@@ -28,12 +27,12 @@ private:
     // Monitor state
     std::thread monitorThread_;
     std::atomic<bool> monitoring_;
-    std::mutex mutex_;
     Napi::ThreadSafeFunction tsfn_;
 
     struct ReaderInfo {
         DWORD lastState;
         std::vector<uint8_t> atr;
+        bool announced;
     };
     std::unordered_map<std::string, ReaderInfo> readerStates_;
 
@@ -45,7 +44,6 @@ private:
 
     // Internal monitoring methods
     void MonitorLoop();
-    void UpdateReaderList();
     void EmitEvent(const std::string& eventType, const std::string& readerName,
                    DWORD state, const std::vector<uint8_t>& atr);
     void StopMonitorInternal();

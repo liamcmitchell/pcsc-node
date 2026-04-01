@@ -1,5 +1,6 @@
 #include "pcsc_reader.h"
 #include "pcsc_errors.h"
+#include "pcsc_debug.h"
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -155,6 +156,7 @@ Napi::Value PCSCReader::Connect(const Napi::CallbackInfo& info) {
 
     return RunAsync(env,
         [this, shareMode, preferredProtocols, result]() {
+            LogPcscCall("SCardConnect", readerName_);
             return SCardConnect(context_, readerName_.c_str(),
                 shareMode, preferredProtocols, &result->card, &result->protocol);
         },
@@ -210,7 +212,8 @@ Napi::Value PCSCReader::Transmit(const Napi::CallbackInfo& info) {
     result->recv.resize(bufferSize);
 
     return RunAsync(env,
-        [card = card_, protocol = protocol_, result]() {
+        [card = card_, protocol = protocol_, result, name = readerName_]() {
+            LogPcscCall("SCardTransmit", name);
             const SCARD_IO_REQUEST* pci = (protocol == SCARD_PROTOCOL_T0) ? SCARD_PCI_T0 :
                                           (protocol == SCARD_PROTOCOL_T1) ? SCARD_PCI_T1 : SCARD_PCI_RAW;
             result->len = static_cast<DWORD>(result->recv.size());
@@ -257,7 +260,8 @@ Napi::Value PCSCReader::Control(const Napi::CallbackInfo& info) {
     result->recv.resize(256);
 
     return RunAsync(env,
-        [card = card_, controlCode, result]() {
+        [card = card_, controlCode, result, name = readerName_]() {
+            LogPcscCall("SCardControl", name);
             return SCardControl(card, controlCode,
                 result->send.empty() ? nullptr : result->send.data(),
                 static_cast<DWORD>(result->send.size()),
@@ -280,6 +284,7 @@ Napi::Value PCSCReader::Disconnect(const Napi::CallbackInfo& info) {
         disposition = info[0].As<Napi::Number>().Uint32Value();
     }
 
+    LogPcscCall("SCardDisconnect", readerName_);
     LONG result = SCardDisconnect(card_, disposition);
     connected_ = false;
     card_ = 0;
@@ -317,7 +322,8 @@ Napi::Value PCSCReader::Reconnect(const Napi::CallbackInfo& info) {
     auto result = std::make_shared<Result>();
 
     return RunAsync(env,
-        [card = card_, shareMode, preferredProtocols, initialization, result]() {
+        [card = card_, shareMode, preferredProtocols, initialization, result, name = readerName_]() {
+            LogPcscCall("SCardReconnect", name);
             return SCardReconnect(card, shareMode, preferredProtocols,
                 initialization, &result->protocol);
         },

@@ -11,8 +11,7 @@ async function main() {
   const ctx = new Context({ autoConnect: false });
 
   try {
-    ctx.start();
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await ctx.start().whenReady();
 
     console.log(`Readers: ${ctx.readers.size}`);
     for (const reader of ctx.readers.values()) {

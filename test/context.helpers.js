@@ -158,6 +158,7 @@ function createMockNative() {
           nativeReader: data.nativeReader,
         });
       }
+      callback({ type: "ready", name: "", state: 0, atr: null });
     },
 
     stopMonitor() {

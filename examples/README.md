@@ -85,6 +85,17 @@ Demonstrates error handling for monitoring and card operations.
 node examples/error-handling.js
 ```
 
+### exercise-devices.js
+
+Comprehensive run for ACS ACR39U + ACR122U with a PKI card.
+Safe checks are default; reset/unpower checks are opt-in.
+
+```bash
+node examples/exercise-devices.js
+node examples/exercise-devices.js --allow-reset
+node examples/exercise-devices.js --allow-reset --allow-unpower
+```
+
 ## Notes
 
 - APDU status words are the last two bytes (SW1/SW2)

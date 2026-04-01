@@ -97,6 +97,8 @@ class Context {
 }
 ```
 
+Set `PCSC_DEBUG=1` to enable native monitor logging in the format `[pcsc] <location> <bits> <reader>`, where location is a single character and bits are emitted in `UICNVEPAXSM` order.
+
 ## Reader
 
 ```typescript
@@ -147,7 +149,7 @@ const {
   FEATURE_VERIFY_PIN_DIRECT,
   FEATURE_MODIFY_PIN_DIRECT,
   parseFeatures,
-  SCARD_CTL_CODE,
+  platformControlCode,
 } = require("smartcard");
 
 const featuresRaw = await reader.control(CM_IOCTL_GET_FEATURE_REQUEST);
@@ -158,7 +160,7 @@ if (features.has(FEATURE_VERIFY_PIN_DIRECT)) {
   console.log("verify code", verifyControlCode);
 }
 
-const customCode = SCARD_CTL_CODE(3500);
+const customCode = platformControlCode(3500);
 ```
 
 ## Constants

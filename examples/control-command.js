@@ -7,8 +7,8 @@
 
 import {
   Context,
-  getControlCode,
-  SCARD_CTL_CODE,
+  platformControlCode,
+  CM_IOCTL_GET_FEATURE_REQUEST,
   SCARD_PROTOCOL_T0,
   SCARD_LEAVE_CARD,
 } from "../lib/index.js";
@@ -22,10 +22,7 @@ async function main() {
   const ctx = new Context();
 
   // Common fallback controls used by PC/SC readers.
-  const controlCandidates = [
-    getControlCode(SCARD_CTL_CODE.IOCTL_CCID_ESCAPE),
-    SCARD_CTL_CODE.CM_IOCTL_GET_FEATURE_REQUEST,
-  ];
+  const controlCandidates = [platformControlCode(1), CM_IOCTL_GET_FEATURE_REQUEST];
 
   try {
     ctx.start();

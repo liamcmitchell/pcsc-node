@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
-  SCARD_CTL_CODE,
+  platformControlCode,
   CM_IOCTL_GET_FEATURE_REQUEST,
   FEATURE_VERIFY_PIN_DIRECT,
   FEATURE_MODIFY_PIN_DIRECT,
@@ -11,19 +11,19 @@ import {
 } from "../lib/control-codes.js";
 
 describe("Control Code Constants", () => {
-  it("SCARD_CTL_CODE should generate correct control codes", () => {
-    const code = SCARD_CTL_CODE(3400);
+  it("platformControlCode should generate correct control codes", () => {
+    const code = platformControlCode(3400);
     assert.strictEqual(typeof code, "number");
     assert(code > 0);
   });
 
-  it("SCARD_CTL_CODE should use Windows formula on win32", () => {
+  it("platformControlCode should use Windows formula on win32", () => {
     const saved = /** @type {PropertyDescriptor} */ (
       Object.getOwnPropertyDescriptor(process, "platform")
     );
     Object.defineProperty(process, "platform", { value: "win32", configurable: true });
     try {
-      assert.strictEqual(SCARD_CTL_CODE(3400), (0x31 << 16) + (3400 << 2));
+      assert.strictEqual(platformControlCode(3400), (0x31 << 16) + (3400 << 2));
     } finally {
       Object.defineProperty(process, "platform", saved);
     }

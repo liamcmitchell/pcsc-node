@@ -163,6 +163,21 @@ describe("Context Integration", () => {
     assert.strictEqual(ctx.readers.size, 0);
   });
 
+  it("should keep readers empty immediately after start", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+
+    const ctx = new Context({ _nativeContext: mock });
+    ctx.start();
+
+    assert.strictEqual(ctx.readers.size, 0);
+
+    await ctx.whenReady();
+    assert.strictEqual(ctx.readers.size, 1);
+
+    ctx.close();
+  });
+
   it("should disconnect cards on close", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
@@ -227,6 +242,34 @@ describe("Context Integration", () => {
     assert.strictEqual(cardEvents.length, 1);
     assert.strictEqual(cardEvents[0].connected, false);
     assert.strictEqual(ctx.readers.size, 1);
+
+    ctx.close();
+  });
+
+  it("whenReady should include initial auto-connect", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
+
+    const ctx = new Context({ _nativeContext: mock });
+    ctx.start();
+    await ctx.whenReady();
+
+    assert.strictEqual(ctx.readers.size, 1);
+    assert.strictEqual(ctx.readers.get("ACR122U")?.connected, true);
+
+    ctx.close();
+  });
+
+  it("whenReady should resolve with initial readers when autoConnect is false", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
+
+    const ctx = new Context({ _nativeContext: mock, autoConnect: false });
+    ctx.start();
+    await ctx.whenReady();
+
+    assert.strictEqual(ctx.readers.size, 1);
+    assert.strictEqual(ctx.readers.get("ACR122U")?.connected, false);
 
     ctx.close();
   });
