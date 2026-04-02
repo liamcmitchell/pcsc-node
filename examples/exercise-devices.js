@@ -1,38 +1,45 @@
 #!/usr/bin/env node
 /**
- * Exercise both known readers with a PKI card, using safe checks by default.
+ * Exercise both known readers with a PKI card.
  *
  * Usage:
  *   node examples/exercise-devices.js
- *   node examples/exercise-devices.js --allow-reset
- *   node examples/exercise-devices.js --allow-reset --allow-unpower
  */
 
 import {
   Context,
-  SCARD_SHARE_SHARED,
+  SCARD_SHARE_EXCLUSIVE,
   SCARD_PROTOCOL_T0,
   SCARD_PROTOCOL_T1,
   SCARD_LEAVE_CARD,
   SCARD_RESET_CARD,
   SCARD_UNPOWER_CARD,
-  platformControlCode,
   CM_IOCTL_GET_FEATURE_REQUEST,
-  parseFeatures,
 } from "../lib/index.js";
-
-const EXPECTED_READERS = ["ACS ACR39U ICC Reader", "ACS ACR122U"];
-
-const allowReset = process.argv.includes("--allow-reset");
-const allowUnpower = process.argv.includes("--allow-unpower");
 
 function formatHex(buffer) {
   return buffer.toString("hex").toUpperCase();
 }
 
-function getKnownReaderLabel(name) {
-  const lower = name.toLowerCase();
-  return EXPECTED_READERS.find((label) => lower.includes(label.toLowerCase()));
+function describeStatusWord(statusWord) {
+  switch (statusWord) {
+    case 0x9000:
+      return "ok";
+    case 0x6700:
+      return "wrong length";
+    case 0x6881:
+      return "not supported";
+    case 0x6982:
+      return "security status not satisfied";
+    case 0x6985:
+      return "conditions of use not satisfied";
+    case 0x6a82:
+      return "file or application not found";
+    case 0x6d00:
+      return "instruction not supported";
+    default:
+      return null;
+  }
 }
 
 async function safeTransmit(reader, name, command) {
@@ -40,43 +47,20 @@ async function safeTransmit(reader, name, command) {
     const response = await reader.transmit(command);
     const sw1 = response[response.length - 2];
     const sw2 = response[response.length - 1];
+    const statusWord = (sw1 << 8) | sw2;
+    const description = describeStatusWord(statusWord);
     console.log(
-      `  ${name}: ${formatHex(response)} (SW=${((sw1 << 8) | sw2).toString(16).toUpperCase().padStart(4, "0")})`,
+      `  ${name}: ${formatHex(response)} (SW=${statusWord.toString(16).toUpperCase().padStart(4, "0")}${description ? ` ${description}` : ""})`,
     );
   } catch (error) {
     console.log(`  ${name}: ${error.message}`);
   }
 }
 
-async function safeControl(reader) {
-  // Escape command IOCTL often maps to code 1 on PC/SC stacks.
-  const controlCodes = [CM_IOCTL_GET_FEATURE_REQUEST, platformControlCode(1)];
-
-  for (const code of controlCodes) {
-    try {
-      const response = await reader.control(code, Buffer.alloc(0));
-      console.log(
-        `  control(0x${code.toString(16).toUpperCase()}): ${formatHex(response) || "<empty>"}`,
-      );
-      if (response.length > 0) {
-        const features = parseFeatures(response);
-        console.log(`  parsed features: ${features.size}`);
-      }
-      return;
-    } catch {
-      // Try next control code.
-    }
-  }
-
-  console.log("  control: not supported by this reader/driver");
-}
-
 async function main() {
   console.log("Smartcard Device Exercise");
   console.log("========================");
-  console.log("Safe checks are enabled by default.");
-  console.log(`Opt-in reset checks: ${allowReset ? "enabled" : "disabled"}`);
-  console.log(`Opt-in unpower checks: ${allowUnpower ? "enabled" : "disabled"}\n`);
+  console.log("Safe checks are enabled by default.\n");
 
   const ctx = new Context();
 
@@ -87,12 +71,6 @@ async function main() {
 
     console.log(`Available readers: ${ctx.readers.size}`);
     const readerTasks = [...ctx.readers.values()].map(async (reader) => {
-      const matchedLabel = getKnownReaderLabel(reader.name);
-      if (!matchedLabel) {
-        console.log(`${reader.name}: unknown, skipping`);
-        return;
-      }
-
       if (!reader.connected) {
         console.log(`${reader.name}: waiting for card...`);
         await new Promise((resolve) => {
@@ -109,7 +87,7 @@ async function main() {
         console.log(`  ATR: ${formatHex(reader.atr)}`);
       }
 
-      // Safe APDUs: UID (works on many contactless cards), then generic SELECT MF, then GET CHALLENGE.
+      // Safe APDUs
       await safeTransmit(reader, "UID (FFCA000000)", Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]));
       await safeTransmit(
         reader,
@@ -122,12 +100,49 @@ async function main() {
         Buffer.from([0x00, 0x84, 0x00, 0x00, 0x08]),
       );
 
-      await safeControl(reader);
+      try {
+        const response = await reader.control(CM_IOCTL_GET_FEATURE_REQUEST, Buffer.alloc(0));
+        console.log(
+          `  GET_FEATURE_REQUEST (0x${CM_IOCTL_GET_FEATURE_REQUEST.toString(16).toUpperCase()}): ${formatHex(response) || "<empty>"}`,
+        );
+      } catch (error) {
+        console.log(`  GET_FEATURE_REQUEST: ${error.message}`);
+      }
 
-      if (allowReset) {
+      let exclusiveReady = false;
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           await reader.reconnect(
-            SCARD_SHARE_SHARED,
+            SCARD_SHARE_EXCLUSIVE,
+            SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+            SCARD_LEAVE_CARD,
+          );
+          exclusiveReady = true;
+          if (attempt > 1) {
+            console.log(`  reconnect(exclusive/no-reset): ok (attempt ${attempt}/3)`);
+          } else {
+            console.log("  reconnect(exclusive/no-reset): ok");
+          }
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            console.log(`  reconnect(exclusive/no-reset): retry ${attempt}/3 (${error.message})`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+      }
+
+      if (!exclusiveReady) {
+        console.log(`  reconnect(exclusive/no-reset): ${lastError?.message ?? "failed"}`);
+        console.log("  skipping reset tests: could not acquire exclusive access");
+      }
+
+      if (exclusiveReady) {
+        try {
+          await reader.reconnect(
+            SCARD_SHARE_EXCLUSIVE,
             SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
             SCARD_RESET_CARD,
           );
@@ -135,12 +150,10 @@ async function main() {
         } catch (error) {
           console.log(`  reconnect(reset): ${error.message}`);
         }
-      }
 
-      if (allowUnpower) {
         try {
           await reader.reconnect(
-            SCARD_SHARE_SHARED,
+            SCARD_SHARE_EXCLUSIVE,
             SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
             SCARD_UNPOWER_CARD,
           );
@@ -151,7 +164,7 @@ async function main() {
       }
 
       try {
-        await reader.disconnect(SCARD_LEAVE_CARD);
+        reader.disconnect(SCARD_LEAVE_CARD);
       } catch {
         // Ignore cleanup failures.
       }
