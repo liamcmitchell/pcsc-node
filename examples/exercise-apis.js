@@ -29,6 +29,7 @@ async function safeTransmit(reader, name, command) {
 async function main() {
   console.log("Exercise APIs");
   console.log("========================");
+  console.log(`Platform: ${process.platform} (${process.arch}) Node ${process.version}`);
 
   const ctx = new Context();
 
@@ -38,7 +39,13 @@ async function main() {
     const readers = await ctx.getReaders();
 
     console.log(`Available readers: ${readers.size}`);
-    const readerTasks = [...readers.values()].map(async (reader) => {
+
+    for (const reader of readers.values()) {
+      if (reader.name.toLowerCase().includes("windows hello")) {
+        console.log(`${reader.name}: skipping`);
+        continue
+      }
+
       if (!reader.connected) {
         console.log(`${reader.name}: waiting for card...`);
         await new Promise((resolve) => {
@@ -137,9 +144,7 @@ async function main() {
       } catch {
         // Ignore cleanup failures.
       }
-    });
-
-    await Promise.allSettled(readerTasks);
+    }
 
     console.log("\nDone.");
   } finally {

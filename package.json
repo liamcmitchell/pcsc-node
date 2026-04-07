@@ -45,8 +45,8 @@
   "scripts": {
     "install": "node-gyp rebuild",
     "rebuild": "node-gyp rebuild",
-    "test": "node --test 'test/*.test.js'",
-    "test:coverage": "c8 --include=lib/**/*.js --reporter=text --reporter=html node --test 'test/*.test.js'",
+    "test": "node --test \"test/*.test.js\"",
+    "test:coverage": "c8 --include=lib/**/*.js --reporter=text --reporter=html node --test \"test/*.test.js\"",
     "typecheck": "tsc",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
