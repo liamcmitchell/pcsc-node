@@ -83,6 +83,29 @@ inline void LogPcscCall(const char* fn, const std::string& hint = "") {
         std::fprintf(stderr, "%s %s %s\n", PcscTimestamp().c_str(), fn, hint.c_str());
 }
 
+// Log completion of a PCSC async call with its result and elapsed time.
+inline void LogPcscResult(const char* fn, const std::string& hint, LONG result, long long elapsedMs) {
+    if (!PcscDebugEnabled()) return;
+    if (hint.empty()) {
+        std::fprintf(
+            stderr,
+            "%s done %-14s rc=0x%08lX t=%lldms\n",
+            PcscTimestamp().c_str(),
+            fn,
+            static_cast<unsigned long>(result),
+            elapsedMs);
+    } else {
+        std::fprintf(
+            stderr,
+            "%s done %-14s rc=0x%08lX t=%lldms %s\n",
+            PcscTimestamp().c_str(),
+            fn,
+            static_cast<unsigned long>(result),
+            elapsedMs,
+            hint.c_str());
+    }
+}
+
 // Log raw reader state bits returned by SCardGetStatusChange.
 inline void LogPcscState(const std::string& readerName, DWORD state) {
     if (!PcscDebugEnabled()) return;

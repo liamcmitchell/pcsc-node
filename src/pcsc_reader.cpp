@@ -1,6 +1,7 @@
 #include "pcsc_reader.h"
 #include "pcsc_errors.h"
 #include "pcsc_debug.h"
+#include <chrono>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -12,16 +13,27 @@ Napi::FunctionReference PCSCReader::constructor;
 class PCSCAsyncWorker : public Napi::AsyncWorker {
 public:
     PCSCAsyncWorker(Napi::Env env,
+                    std::string operation,
+                    std::string hint,
                     std::function<LONG()> execute,
                     std::function<Napi::Value(Napi::Env)> resolve,
                     Napi::Promise::Deferred deferred)
         : Napi::AsyncWorker(env),
+          operation_(std::move(operation)),
+          hint_(std::move(hint)),
           execute_(std::move(execute)),
           resolve_(std::move(resolve)),
           result_(SCARD_S_SUCCESS),
           deferred_(deferred) {}
 
-    void Execute() override { result_ = execute_(); }
+    void Execute() override {
+        using clock = std::chrono::steady_clock;
+        const auto start = clock::now();
+        LogPcscCall(operation_.c_str(), hint_);
+        result_ = execute_();
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - start);
+        LogPcscResult(operation_.c_str(), hint_, result_, elapsed.count());
+    }
 
     void OnOK() override {
         Napi::Env env = Env();
@@ -37,6 +49,8 @@ public:
     }
 
 private:
+    std::string operation_;
+    std::string hint_;
     std::function<LONG()> execute_;
     std::function<Napi::Value(Napi::Env)> resolve_;
     LONG result_;
@@ -44,10 +58,18 @@ private:
 };
 
 static Napi::Value RunAsync(Napi::Env env,
+                            std::string operation,
+                            std::string hint,
                             std::function<LONG()> execute,
                             std::function<Napi::Value(Napi::Env)> resolve) {
     auto deferred = Napi::Promise::Deferred::New(env);
-    auto* worker = new PCSCAsyncWorker(env, std::move(execute), std::move(resolve), deferred);
+    auto* worker = new PCSCAsyncWorker(
+        env,
+        std::move(operation),
+        std::move(hint),
+        std::move(execute),
+        std::move(resolve),
+        deferred);
     worker->Queue();
     return deferred.Promise();
 }
@@ -155,8 +177,9 @@ Napi::Value PCSCReader::Connect(const Napi::CallbackInfo& info) {
     auto result = std::make_shared<Result>();
 
     return RunAsync(env,
+        "SCardConnect",
+        readerName_,
         [this, shareMode, preferredProtocols, result]() {
-            LogPcscCall("SCardConnect", readerName_);
             return SCardConnect(context_, readerName_.c_str(),
                 shareMode, preferredProtocols, &result->card, &result->protocol);
         },
@@ -202,8 +225,9 @@ Napi::Value PCSCReader::Transmit(const Napi::CallbackInfo& info) {
     result->recv.resize(bufferSize);
 
     return RunAsync(env,
-        [card = card_, protocol = protocol_, result, name = readerName_]() {
-            LogPcscCall("SCardTransmit", name);
+        "SCardTransmit",
+        readerName_,
+        [card = card_, protocol = protocol_, result]() {
             const SCARD_IO_REQUEST* pci = (protocol == SCARD_PROTOCOL_T0) ? SCARD_PCI_T0 :
                                           (protocol == SCARD_PROTOCOL_T1) ? SCARD_PCI_T1 : SCARD_PCI_RAW;
             result->len = static_cast<DWORD>(result->recv.size());
@@ -250,8 +274,9 @@ Napi::Value PCSCReader::Control(const Napi::CallbackInfo& info) {
     result->recv.resize(256);
 
     return RunAsync(env,
-        [card = card_, controlCode, result, name = readerName_]() {
-            LogPcscCall("SCardControl", name);
+        "SCardControl",
+        readerName_,
+        [card = card_, controlCode, result]() {
             return SCardControl(card, controlCode,
                 result->send.empty() ? nullptr : result->send.data(),
                 static_cast<DWORD>(result->send.size()),
@@ -276,6 +301,7 @@ Napi::Value PCSCReader::Disconnect(const Napi::CallbackInfo& info) {
 
     LogPcscCall("SCardDisconnect", readerName_);
     LONG result = SCardDisconnect(card_, disposition);
+    LogPcscResult("SCardDisconnect", readerName_, result, 0);
     connected_ = false;
     card_ = 0;
 
@@ -312,8 +338,9 @@ Napi::Value PCSCReader::Reconnect(const Napi::CallbackInfo& info) {
     auto result = std::make_shared<Result>();
 
     return RunAsync(env,
-        [card = card_, shareMode, preferredProtocols, initialization, result, name = readerName_]() {
-            LogPcscCall("SCardReconnect", name);
+        "SCardReconnect",
+        readerName_,
+        [card = card_, shareMode, preferredProtocols, initialization, result]() {
             return SCardReconnect(card, shareMode, preferredProtocols,
                 initialization, &result->protocol);
         },
