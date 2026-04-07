@@ -1,7 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { createMockNative, responseMap } from "./context.helpers.js";
-import { SCARD_PROTOCOL_T1 } from "../lib/native.js";
+import {
+  SCARD_PROTOCOL_T1,
+  SCARD_W_UNRESPONSIVE_CARD,
+  SCARD_E_SHARING_VIOLATION,
+} from "../lib/native.js";
 import { Context } from "../lib/context.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -674,14 +678,18 @@ describe("Context Integration", () => {
 });
 
 describe("Protocol Fallback", () => {
-  it("should fallback to T=0 when dual protocol fails with unresponsive error", async () => {
+  it("should fallback to T=0 when dual protocol fails with unresponsive code", async () => {
     const mock = createMockNative();
     let connectCalls = 0;
     mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
       onConnect: async (shareMode, protocol) => {
         connectCalls++;
-        if (protocol & SCARD_PROTOCOL_T1) throw new Error("Card is unresponsive");
+        if (protocol & SCARD_PROTOCOL_T1) {
+          const error = new Error("Card failed initial protocol negotiation");
+          error.code = SCARD_W_UNRESPONSIVE_CARD;
+          throw error;
+        }
       },
     });
 
@@ -703,12 +711,14 @@ describe("Protocol Fallback", () => {
     ctx.close();
   });
 
-  it("should rethrow non-unresponsive errors without fallback", async () => {
+  it("should rethrow non-unresponsive codes without fallback", async () => {
     const mock = createMockNative();
     mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
       onConnect: async () => {
-        throw new Error("Sharing violation");
+        const error = new Error("Sharing violation");
+        error.code = SCARD_E_SHARING_VIOLATION;
+        throw error;
       },
     });
 
@@ -725,6 +735,7 @@ describe("Protocol Fallback", () => {
 
     assert.strictEqual(cardEvents.length, 0, "Should not emit card-inserted event");
     assert.strictEqual(errors.length, 1, "Should emit error");
+    assert.strictEqual(errors[0].code, SCARD_E_SHARING_VIOLATION);
     assert(
       errors[0].message.includes("Sharing violation"),
       "Error should contain original message",
