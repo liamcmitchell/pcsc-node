@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * List all currently attached PC/SC readers.
- *
- * Usage: node list-readers.js
- */
-
 import { Context } from "../lib/index.js";
 
 async function main() {

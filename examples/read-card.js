@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Wait for a card and read ATR + UID.
- *
- * Usage: node read-card.js
- */
-
 import {
   Context,
   Disposition,

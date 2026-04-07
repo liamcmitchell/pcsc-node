@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Demonstrates handling context and reader errors.
- *
- * Usage: node error-handling.js
- */
-
 import { Context, Disposition, Errors } from "../lib/index.js";
 
 async function main() {

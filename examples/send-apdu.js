@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Send a custom APDU command to a card.
- *
- * Usage: node send-apdu.js
- */
-
 import { Context, Disposition, parseResponse, protocolName } from "../lib/index.js";
 import { toHex } from "../lib/hex.js";
 

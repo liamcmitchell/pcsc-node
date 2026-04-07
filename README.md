@@ -202,7 +202,23 @@ try {
 
 ## Examples
 
-See [examples/README.md](examples/README.md).
+```bash
+npm install
+node examples/list-readers.js
+```
+
+| File                            | Description                                                             |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `examples/list-readers.js`      | List current readers and print total count via `ctx.readers.size`.      |
+| `examples/monitor-cards.js`     | Monitor reader/card lifecycle events.                                   |
+| `examples/read-card.js`         | Wait for first card and read ATR + UID.                                 |
+| `examples/send-apdu.js`         | Send a UID APDU (`FF CA 00 00 00`) to the first available card.         |
+| `examples/wait-for-card.js`     | Wait for first card insertion with a fixed 30-second timeout.           |
+| `examples/control-command.js`   | Send a control payload with common PC/SC control-code fallbacks.        |
+| `examples/reconnect.js`         | Demonstrate `reader.reconnect()` for reset/protocol/share-mode changes. |
+| `examples/mifare-read-write.js` | Authenticate, read, write, verify, and restore a MIFARE Classic block.  |
+| `examples/error-handling.js`    | Demonstrate monitor and card operation error handling.                  |
+| `examples/exercise-apis.js`     | Exercise as many APIs as possible in one command.                       |
 
 ## License
 

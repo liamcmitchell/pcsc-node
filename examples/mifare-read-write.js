@@ -1,12 +1,3 @@
-#!/usr/bin/env node
-/**
- * MIFARE Classic block read/write demo.
- *
- * Usage: node mifare-read-write.js
- *
- * WARNING: This writes block 4. Use a test card only.
- */
-
 import {
   Context,
   Disposition,

@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Wait for a card insertion event.
- *
- * Usage: node wait-for-card.js
- */
-
 import { Context, protocolName } from "../lib/index.js";
 
 async function main() {

@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Demonstrates reader.reconnect() for reset/protocol/share-mode changes.
- *
- * Usage: node reconnect.js
- */
-
 import { Context, ShareMode, Protocol, Disposition, protocolName } from "../lib/index.js";
 
 async function main() {

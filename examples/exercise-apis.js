@@ -1,11 +1,3 @@
-#!/usr/bin/env node
-/**
- * Safely excercise as much of the API as possible in a single command.
- *
- * Usage:
- *   node examples/exercise-devices.js
- */
-
 import {
   Context,
   ShareMode,
@@ -35,7 +27,7 @@ async function safeTransmit(reader, name, command) {
 }
 
 async function main() {
-  console.log("Exercise devices");
+  console.log("Exercise APIs");
   console.log("========================");
 
   const ctx = new Context();

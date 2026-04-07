@@ -1,10 +1,3 @@
-#!/usr/bin/env node
-/**
- * Send an escape/control command to a reader.
- *
- * Usage: node control-command.js
- */
-
 import {
   Context,
   Disposition,

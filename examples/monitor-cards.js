@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-/**
- * Monitor for card insert/remove events using the Context API
- *
- * Usage: node monitor-cards.js
- *
- * Press Ctrl+C to stop monitoring.
- */
-
 import { Context, Errors, StatusWord, parseResponse } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
