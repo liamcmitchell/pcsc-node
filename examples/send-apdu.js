@@ -5,7 +5,8 @@
  * Usage: node send-apdu.js
  */
 
-import { Context, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD } from "../lib/index.js";
+import { Context, Disposition, parseResponse, protocolName } from "../lib/index.js";
+import { toHex } from "../lib/hex.js";
 
 function formatHex(buffer) {
   return buffer.toString("hex").toUpperCase().match(/.{2}/g).join(" ");
@@ -25,18 +26,15 @@ async function main() {
     });
 
     console.log(`Reader: ${reader.name}`);
-    console.log(`Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
+    console.log(`Protocol: ${protocolName(reader.protocol)}`);
 
     const response = await reader.transmit(apdu);
     console.log(`Response: ${formatHex(response)}`);
 
-    if (response.length >= 2) {
-      const sw1 = response[response.length - 2];
-      const sw2 = response[response.length - 1];
-      console.log(`SW: ${((sw1 << 8) | sw2).toString(16).toUpperCase().padStart(4, "0")}`);
-    }
+    const parsed = parseResponse(response);
+    console.log(`SW: ${toHex(parsed.sw, 4)}`);
 
-    reader.disconnect(SCARD_LEAVE_CARD);
+    reader.disconnect(Disposition.LEAVE);
   } catch (error) {
     console.error(`Error: ${error.message}`);
   } finally {

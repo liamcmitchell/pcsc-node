@@ -40,7 +40,7 @@ Typical flow:
 ## Quick Start
 
 ```javascript
-const { Context } = require("smartcard");
+const { Context, StatusWord, parseResponse, protocolName } = require("smartcard");
 
 const ctx = new Context();
 
@@ -56,9 +56,9 @@ ctx
 
     try {
       const uidResponse = await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      const sw = (uidResponse[uidResponse.length - 2] << 8) | uidResponse[uidResponse.length - 1];
-      if (sw === 0x9000) {
-        console.log("UID:", uidResponse.subarray(0, -2).toString("hex"));
+      const parsed = parseResponse(uidResponse);
+      if (parsed.sw === StatusWord.OK) {
+        console.log("UID:", parsed.data.toString("hex"));
       }
     } catch (error) {
       console.error("Transmit failed:", error.message);
@@ -144,20 +144,18 @@ const ctx = new Context({ autoGetResponse: true });
 ## Control Codes
 
 ```javascript
-const {
-  CM_IOCTL_GET_FEATURE_REQUEST,
-  FEATURE_VERIFY_PIN_DIRECT,
-  FEATURE_MODIFY_PIN_DIRECT,
-  parseFeatures,
-  platformControlCode,
-} = require("smartcard");
+const { ControlCode, Feature, parseFeaturesDetails, platformControlCode } = require("smartcard");
 
-const featuresRaw = await reader.control(CM_IOCTL_GET_FEATURE_REQUEST);
-const features = parseFeatures(featuresRaw);
+const featuresRaw = await reader.control(ControlCode.GET_FEATURE_REQUEST);
+const features = parseFeaturesDetails(featuresRaw);
 
-if (features.has(FEATURE_VERIFY_PIN_DIRECT)) {
-  const verifyControlCode = features.get(FEATURE_VERIFY_PIN_DIRECT);
-  console.log("verify code", verifyControlCode);
+for (const feature of features) {
+  console.log(feature.name, feature.controlCode);
+}
+
+const verify = features.find((f) => f.tag === Feature.VERIFY_PIN_DIRECT);
+if (verify) {
+  console.log("verify code", verify.controlCode);
 }
 
 const customCode = platformControlCode(3500);
@@ -166,22 +164,22 @@ const customCode = platformControlCode(3500);
 ## Constants
 
 ```javascript
-SCARD_SHARE_EXCLUSIVE;
-SCARD_SHARE_SHARED;
-SCARD_SHARE_DIRECT;
+ShareMode.EXCLUSIVE;
+ShareMode.SHARED;
+ShareMode.DIRECT;
 
-SCARD_PROTOCOL_T0;
-SCARD_PROTOCOL_T1;
-SCARD_PROTOCOL_RAW;
+Protocol.T0;
+Protocol.T1;
+Protocol.RAW;
 
-SCARD_LEAVE_CARD;
-SCARD_RESET_CARD;
-SCARD_UNPOWER_CARD;
-SCARD_EJECT_CARD;
+Disposition.LEAVE;
+Disposition.RESET;
+Disposition.UNPOWER;
+Disposition.EJECT;
 
-SCARD_STATE_PRESENT;
-SCARD_STATE_EMPTY;
-SCARD_STATE_CHANGED;
+State.PRESENT;
+State.EMPTY;
+State.CHANGED;
 ```
 
 ## Error Handling

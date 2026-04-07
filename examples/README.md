@@ -98,6 +98,6 @@ node examples/exercise-devices.js --allow-reset --allow-unpower
 
 ## Notes
 
-- APDU status words are the last two bytes (SW1/SW2)
+- Use `parseResponse()` to decode APDU payload + status words (SW1/SW2)
 - Most contactless readers support UID via `FF CA 00 00 00`
 - Some reader control commands are vendor-specific

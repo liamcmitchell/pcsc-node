@@ -64,13 +64,13 @@
     "oxlint": "^1.57.0",
     "typescript": "^6.0.2"
   },
-  "engines": {
-    "node": ">=22.0.0"
-  },
   "devEngines": {
     "packageManager": {
       "name": "npm"
     }
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "gypfile": true
 }

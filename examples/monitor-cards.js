@@ -7,7 +7,7 @@
  * Press Ctrl+C to stop monitoring.
  */
 
-import { Context } from "../lib/index.js";
+import { Context, StatusWord, parseResponse } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
 console.log("==================");
@@ -31,13 +31,9 @@ const context = new Context()
     // Try to read UID
     try {
       const response = await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      if (response.length >= 2) {
-        const sw1 = response[response.length - 2];
-        const sw2 = response[response.length - 1];
-        if (sw1 === 0x90 && sw2 === 0x00) {
-          const uid = response.subarray(0, -2);
-          console.log(`    UID: ${uid.toString("hex")}`);
-        }
+      const parsed = parseResponse(response);
+      if (parsed.sw === StatusWord.OK) {
+        console.log(`    UID: ${parsed.data.toString("hex")}`);
       }
     } catch {
       // UID read not supported, that's OK

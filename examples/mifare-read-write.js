@@ -9,12 +9,16 @@
 
 import {
   Context,
-  SCARD_PROTOCOL_T0,
-  SCARD_LEAVE_CARD,
+  Disposition,
+  StatusWord,
   BLOCK_NUMBER,
   MIFARE_CLASSIC,
   MIFARE_ULTRALIGHT,
+  parseResponse,
+  protocolName,
+  statusWordName,
 } from "../lib/index.js";
+import { toHex } from "../lib/hex.js";
 
 function detectCardType(atr) {
   if (!atr || atr.length < 14) return MIFARE_ULTRALIGHT;
@@ -39,10 +43,10 @@ function buildWriteApdu(blockNumber, data) {
 }
 
 function assertSuccess(response, operation) {
-  const sw1 = response[response.length - 2];
-  const sw2 = response[response.length - 1];
-  if (sw1 !== 0x90 || sw2 !== 0x00) {
-    throw new Error(`${operation} failed (${sw1.toString(16)} ${sw2.toString(16)})`);
+  const parsed = parseResponse(response);
+  if (parsed.sw !== StatusWord.OK) {
+    const hint = statusWordName(parsed.sw);
+    throw new Error(`${operation} failed (${toHex(parsed.sw, 4)} ${hint})`);
   }
 }
 
@@ -58,7 +62,7 @@ async function main() {
       ctx.once("error", reject);
     });
     console.log(`Reader: ${reader.name}`);
-    console.log(`Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
+    console.log(`Protocol: ${protocolName(reader.protocol)}`);
 
     if (reader.atr) console.log(`ATR: ${reader.atr.toString("hex")}`);
 
@@ -98,7 +102,7 @@ async function main() {
     assertSuccess(restore, "Restore write");
 
     console.log("Done.");
-    reader.disconnect(SCARD_LEAVE_CARD);
+    reader.disconnect(Disposition.LEAVE);
   } catch (error) {
     console.error(`Error: ${error.message}`);
   } finally {

@@ -7,11 +7,12 @@
 
 import {
   Context,
+  Disposition,
+  ControlCode,
   platformControlCode,
-  CM_IOCTL_GET_FEATURE_REQUEST,
-  SCARD_PROTOCOL_T0,
-  SCARD_LEAVE_CARD,
+  protocolName,
 } from "../lib/index.js";
+import { toHex } from "../lib/hex.js";
 
 function formatHex(buffer) {
   return buffer.toString("hex").toUpperCase().match(/.{2}/g).join(" ");
@@ -22,7 +23,7 @@ async function main() {
   const ctx = new Context();
 
   // Common fallback controls used by PC/SC readers.
-  const controlCandidates = [platformControlCode(1), CM_IOCTL_GET_FEATURE_REQUEST];
+  const controlCandidates = [platformControlCode(1), ControlCode.GET_FEATURE_REQUEST];
 
   try {
     ctx.start();
@@ -32,7 +33,7 @@ async function main() {
     });
 
     console.log(`Reader: ${reader.name}`);
-    console.log(`Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
+    console.log(`Protocol: ${protocolName(reader.protocol)}`);
     console.log(`Command: ${formatHex(command)}`);
 
     let response = null;
@@ -52,10 +53,10 @@ async function main() {
       throw new Error("Control command failed with all known control codes");
     }
 
-    console.log(`Control code: 0x${usedCode.toString(16).toUpperCase()}`);
+    console.log(`Control code: ${toHex(usedCode)}`);
     console.log(`Response: ${formatHex(response)}`);
 
-    reader.disconnect(SCARD_LEAVE_CARD);
+    reader.disconnect(Disposition.LEAVE);
   } catch (error) {
     console.error(`Error: ${error.message}`);
   } finally {

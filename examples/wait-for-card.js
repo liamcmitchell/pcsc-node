@@ -5,7 +5,7 @@
  * Usage: node wait-for-card.js
  */
 
-import { Context, SCARD_PROTOCOL_T0 } from "../lib/index.js";
+import { Context, protocolName } from "../lib/index.js";
 
 async function main() {
   const timeoutMs = 30_000;
@@ -28,7 +28,7 @@ async function main() {
     ]);
 
     console.log(`Card detected in: ${reader.name}`);
-    console.log(`Connected! Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
+    console.log(`Connected! Protocol: ${protocolName(reader.protocol)}`);
     if (reader.atr) {
       console.log(`ATR: ${reader.atr.toString("hex")}`);
     }

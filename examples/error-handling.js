@@ -5,13 +5,7 @@
  * Usage: node error-handling.js
  */
 
-import {
-  Context,
-  SCARD_LEAVE_CARD,
-  SCARD_UNPOWER_CARD,
-  PCSCError,
-  NoCardError,
-} from "../lib/index.js";
+import { Context, Disposition, PCSCError, NoCardError } from "../lib/index.js";
 
 async function main() {
   const ctx = new Context();
@@ -43,9 +37,9 @@ async function main() {
     }
 
     try {
-      await reader.disconnect(SCARD_UNPOWER_CARD);
+      await reader.disconnect(Disposition.UNPOWER);
     } catch {
-      await reader.disconnect(SCARD_LEAVE_CARD);
+      await reader.disconnect(Disposition.LEAVE);
     }
   } catch (error) {
     console.error(`Fatal error: ${error.message}`);

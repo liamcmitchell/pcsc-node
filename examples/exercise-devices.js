@@ -8,50 +8,26 @@
 
 import {
   Context,
-  SCARD_SHARE_EXCLUSIVE,
-  SCARD_PROTOCOL_T0,
-  SCARD_PROTOCOL_T1,
-  SCARD_LEAVE_CARD,
-  SCARD_RESET_CARD,
-  SCARD_UNPOWER_CARD,
-  CM_IOCTL_GET_FEATURE_REQUEST,
+  ShareMode,
+  Protocol,
+  Disposition,
+  ControlCode,
+  parseResponse,
+  protocolName,
+  statusWordName,
 } from "../lib/index.js";
+import { toHex } from "../lib/hex.js";
 
 function formatHex(buffer) {
   return buffer.toString("hex").toUpperCase();
 }
 
-function describeStatusWord(statusWord) {
-  switch (statusWord) {
-    case 0x9000:
-      return "ok";
-    case 0x6700:
-      return "wrong length";
-    case 0x6881:
-      return "not supported";
-    case 0x6982:
-      return "security status not satisfied";
-    case 0x6985:
-      return "conditions of use not satisfied";
-    case 0x6a82:
-      return "file or application not found";
-    case 0x6d00:
-      return "instruction not supported";
-    default:
-      return null;
-  }
-}
-
 async function safeTransmit(reader, name, command) {
   try {
     const response = await reader.transmit(command);
-    const sw1 = response[response.length - 2];
-    const sw2 = response[response.length - 1];
-    const statusWord = (sw1 << 8) | sw2;
-    const description = describeStatusWord(statusWord);
-    console.log(
-      `  ${name}: ${formatHex(response)} (SW=${statusWord.toString(16).toUpperCase().padStart(4, "0")}${description ? ` ${description}` : ""})`,
-    );
+    const parsed = parseResponse(response);
+    const description = statusWordName(parsed.sw);
+    console.log(`  ${name}: ${formatHex(response)} (SW=${toHex(parsed.sw, 4)} ${description})`);
   } catch (error) {
     console.log(`  ${name}: ${error.message}`);
   }
@@ -80,9 +56,7 @@ async function main() {
 
       console.log(`${reader.name}:`);
       console.log(`  connected: ${reader.connected ? "yes" : "no"}`);
-      console.log(
-        `  protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : reader.protocol === SCARD_PROTOCOL_T1 ? "T=1" : reader.protocol}`,
-      );
+      console.log(`  protocol: ${protocolName(reader.protocol)}`);
       if (reader.atr) {
         console.log(`  ATR: ${formatHex(reader.atr)}`);
       }
@@ -101,9 +75,9 @@ async function main() {
       );
 
       try {
-        const response = await reader.control(CM_IOCTL_GET_FEATURE_REQUEST, Buffer.alloc(0));
+        const response = await reader.control(ControlCode.GET_FEATURE_REQUEST, Buffer.alloc(0));
         console.log(
-          `  GET_FEATURE_REQUEST (0x${CM_IOCTL_GET_FEATURE_REQUEST.toString(16).toUpperCase()}): ${formatHex(response) || "<empty>"}`,
+          `  GET_FEATURE_REQUEST (${toHex(ControlCode.GET_FEATURE_REQUEST)}): ${formatHex(response) || "<empty>"}`,
         );
       } catch (error) {
         console.log(`  GET_FEATURE_REQUEST: ${error.message}`);
@@ -113,11 +87,7 @@ async function main() {
       let lastError = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await reader.reconnect(
-            SCARD_SHARE_EXCLUSIVE,
-            SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-            SCARD_LEAVE_CARD,
-          );
+          await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.LEAVE);
           exclusiveReady = true;
           if (attempt > 1) {
             console.log(`  reconnect(exclusive/no-reset): ok (attempt ${attempt}/3)`);
@@ -141,11 +111,7 @@ async function main() {
 
       if (exclusiveReady) {
         try {
-          await reader.reconnect(
-            SCARD_SHARE_EXCLUSIVE,
-            SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-            SCARD_RESET_CARD,
-          );
+          await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.RESET);
           console.log("  reconnect(reset): ok");
         } catch (error) {
           console.log(`  reconnect(reset): ${error.message}`);
@@ -153,9 +119,9 @@ async function main() {
 
         try {
           await reader.reconnect(
-            SCARD_SHARE_EXCLUSIVE,
-            SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-            SCARD_UNPOWER_CARD,
+            ShareMode.EXCLUSIVE,
+            Protocol.T0 | Protocol.T1,
+            Disposition.UNPOWER,
           );
           console.log("  reconnect(unpower): ok");
         } catch (error) {
@@ -164,7 +130,7 @@ async function main() {
       }
 
       try {
-        reader.disconnect(SCARD_LEAVE_CARD);
+        reader.disconnect(Disposition.LEAVE);
       } catch {
         // Ignore cleanup failures.
       }

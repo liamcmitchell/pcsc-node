@@ -5,7 +5,15 @@
  * Usage: node read-card.js
  */
 
-import { Context, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD } from "../lib/index.js";
+import {
+  Context,
+  Disposition,
+  StatusWord,
+  parseResponse,
+  protocolName,
+  statusWordName,
+} from "../lib/index.js";
+import { toHex } from "../lib/hex.js";
 
 async function main() {
   const ctx = new Context();
@@ -20,7 +28,7 @@ async function main() {
     });
 
     console.log(`Using reader: ${reader.name}`);
-    console.log(`Connected! Protocol: ${reader.protocol === SCARD_PROTOCOL_T0 ? "T=0" : "T=1"}`);
+    console.log(`Connected! Protocol: ${protocolName(reader.protocol)}`);
 
     if (reader.atr) {
       console.log(`ATR: ${reader.atr.toString("hex")}`);
@@ -28,18 +36,18 @@ async function main() {
 
     try {
       const response = await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
-      const sw1 = response[response.length - 2];
-      const sw2 = response[response.length - 1];
-      if (sw1 === 0x90 && sw2 === 0x00) {
-        console.log(`UID: ${response.subarray(0, -2).toString("hex")}`);
+      const parsed = parseResponse(response);
+      if (parsed.sw === StatusWord.OK) {
+        console.log(`UID: ${parsed.data.toString("hex")}`);
       } else {
-        console.log(`UID command returned: ${sw1.toString(16)} ${sw2.toString(16)}`);
+        const hint = statusWordName(parsed.sw);
+        console.log(`UID command returned: ${toHex(parsed.sw, 4)} (${hint})`);
       }
     } catch (error) {
       console.log(`Could not read UID: ${error.message}`);
     }
 
-    reader.disconnect(SCARD_LEAVE_CARD);
+    reader.disconnect(Disposition.LEAVE);
   } catch (error) {
     console.error(`Error: ${error.message}`);
   } finally {

@@ -5,22 +5,7 @@
  * Usage: node reconnect.js
  */
 
-import {
-  Context,
-  SCARD_SHARE_SHARED,
-  SCARD_SHARE_EXCLUSIVE,
-  SCARD_PROTOCOL_T0,
-  SCARD_PROTOCOL_T1,
-  SCARD_LEAVE_CARD,
-  SCARD_RESET_CARD,
-  SCARD_UNPOWER_CARD,
-} from "../lib/index.js";
-
-function protocolName(protocol) {
-  if (protocol === SCARD_PROTOCOL_T0) return "T=0";
-  if (protocol === SCARD_PROTOCOL_T1) return "T=1";
-  return `Unknown (${protocol})`;
-}
+import { Context, ShareMode, Protocol, Disposition, protocolName } from "../lib/index.js";
 
 async function main() {
   const ctx = new Context();
@@ -35,52 +20,36 @@ async function main() {
     console.log(`Reader: ${reader.name}`);
     console.log(`Protocol: ${protocolName(reader.protocol)}`);
 
-    await reader.reconnect(
-      SCARD_SHARE_SHARED,
-      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-      SCARD_RESET_CARD,
-    );
+    await reader.reconnect(ShareMode.SHARED, Protocol.T0 | Protocol.T1, Disposition.RESET);
     console.log(`After reset: ${protocolName(reader.protocol)}`);
 
     try {
-      await reader.reconnect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_RESET_CARD);
+      await reader.reconnect(ShareMode.SHARED, Protocol.T0, Disposition.RESET);
       console.log(`T=0 reconnect: ${protocolName(reader.protocol)}`);
     } catch (error) {
       console.log(`T=0 not supported: ${error.message}`);
     }
 
     try {
-      await reader.reconnect(SCARD_SHARE_SHARED, SCARD_PROTOCOL_T1, SCARD_RESET_CARD);
+      await reader.reconnect(ShareMode.SHARED, Protocol.T1, Disposition.RESET);
       console.log(`T=1 reconnect: ${protocolName(reader.protocol)}`);
     } catch (error) {
       console.log(`T=1 not supported: ${error.message}`);
     }
 
-    await reader.reconnect(
-      SCARD_SHARE_SHARED,
-      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-      SCARD_UNPOWER_CARD,
-    );
+    await reader.reconnect(ShareMode.SHARED, Protocol.T0 | Protocol.T1, Disposition.UNPOWER);
     console.log(`After power cycle: ${protocolName(reader.protocol)}`);
 
     try {
-      await reader.reconnect(
-        SCARD_SHARE_EXCLUSIVE,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-        SCARD_LEAVE_CARD,
-      );
+      await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.LEAVE);
       console.log("Exclusive mode acquired.");
-      await reader.reconnect(
-        SCARD_SHARE_SHARED,
-        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-        SCARD_LEAVE_CARD,
-      );
+      await reader.reconnect(ShareMode.SHARED, Protocol.T0 | Protocol.T1, Disposition.LEAVE);
       console.log("Back to shared mode.");
     } catch (error) {
       console.log(`Exclusive mode failed: ${error.message}`);
     }
 
-    reader.disconnect(SCARD_LEAVE_CARD);
+    reader.disconnect(Disposition.LEAVE);
   } catch (error) {
     console.error(`Error: ${error.message}`);
   } finally {
