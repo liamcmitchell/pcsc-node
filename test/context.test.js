@@ -776,14 +776,17 @@ describe("Auto GET RESPONSE", () => {
     assert(response.equals(Buffer.from([0x61, 0x1c])));
   });
 
-  it("should skip handling when autoGetResponse is not specified", async () => {
+  it("should handle SW1=61 when autoGetResponse is not specified", async () => {
     const { response, nativeReader } = await transmitViaReader(
-      [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] }],
+      [
+        { command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] },
+        { command: [0x00, 0xc0, 0x00, 0x00, 0x1c], response: [0x90, 0x00] },
+      ],
       [0x00, 0xa4, 0x04, 0x00, 0x0e],
       {},
     );
-    assert.strictEqual(nativeReader.transmitCount, 1);
-    assert(response.equals(Buffer.from([0x61, 0x1c])));
+    assert.strictEqual(nativeReader.transmitCount, 2);
+    assert(response.equals(Buffer.from([0x90, 0x00])));
   });
 
   it("should pass through error status words", async () => {
@@ -887,12 +890,13 @@ describe("reader.transmit() autoGetResponse option", () => {
     ctx.close();
   });
 
-  it("should return raw response when autoGetResponse is not specified", async () => {
+  it("should auto-handle SW1=61 when autoGetResponse is not specified", async () => {
     const mock = createMockNative();
     const nativeReader = mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
       onTransmit: responseMap([
         { command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] },
+        { command: [0x00, 0xc0, 0x00, 0x00, 0x1c], response: [0x90, 0x00] },
       ]),
     });
 
@@ -907,8 +911,8 @@ describe("reader.transmit() autoGetResponse option", () => {
     const reader = cardEvents[0];
     const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e]);
 
-    assert.strictEqual(nativeReader.transmitCount, 1, "Should only transmit once");
-    assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
+    assert.strictEqual(nativeReader.transmitCount, 2, "Should have sent 2 commands");
+    assert(response.equals(Buffer.from([0x90, 0x00])), "Should return handled response");
 
     ctx.close();
   });

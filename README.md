@@ -122,23 +122,23 @@ class Reader {
 
 ## Auto GET RESPONSE (T=0)
 
-Enable automatic handling for T=0 status words:
+Automatic handling is enabled by default for T=0 status words:
 
 - `61 xx`: sends GET RESPONSE automatically
 - `6C xx`: retries with corrected Le automatically
 
-Per-call:
+Per-call opt-out:
 
 ```javascript
 const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
-  autoGetResponse: true,
+  autoGetResponse: false,
 });
 ```
 
-Or as a context default:
+Or disable it as a context default:
 
 ```javascript
-const ctx = new Context({ autoGetResponse: true });
+const ctx = new Context({ autoGetResponse: false });
 ```
 
 ## Control Codes
