@@ -77,7 +77,7 @@ async function main() {
     console.log(`Original: ${originalData.toString("hex")}`);
 
     const writeData = Buffer.alloc(16, 0);
-    Buffer.from("SMARTCARD-DEMO", "ascii").copy(writeData);
+    Buffer.from("DEMO", "ascii").copy(writeData);
 
     console.log(`Writing block ${BLOCK_NUMBER}...`);
     const write = await reader.transmit(buildWriteApdu(BLOCK_NUMBER, writeData));

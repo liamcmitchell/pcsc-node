@@ -1,13 +1,16 @@
-# smartcard
+# pcsc-node
 
-Stable PC/SC bindings for Node.js.
+PC/SC bindings for Node.js 22+.
 
-Works with Node.js 22+ without recompilation. Built on N-API for ABI stability.
+- Built on N-API for ABI stability.
+- ES modules.
+- TS types in JSDoc.
+- No JS build step means you can fork & install from git.
 
 ## Install
 
 ```bash
-npm install smartcard
+npm install github:liamcmitchell/pcsc-node
 ```
 
 ## Platform Setup
@@ -24,8 +27,6 @@ sudo systemctl start pcscd
 
 ## API Model
 
-There is one API surface:
-
 - Context: lifecycle and reader/card event monitoring
 - Reader: connected card operations (`transmit`, `control`, `reconnect`, `disconnect`)
 
@@ -33,14 +34,14 @@ Typical flow:
 
 1. Create `new Context()`
 2. Register event listeners (`reader`, `attach`, `detach`, `insert`, `remove`, `change`, `error`)
-3. Call `start()` or call `getReaders()` (auto-start)
-4. Use `reader` methods inside event handlers
+3. Call `start()` or `getReaders()` (auto-start)
+4. Use `reader` methods
 5. Call `close()` on shutdown
 
 ## Quick Start
 
 ```javascript
-const { Context, StatusWord, parseResponse, protocolName } = require("smartcard");
+import { Context, StatusWord, parseResponse, protocolName } from "pcsc-node";
 
 const ctx = new Context();
 
@@ -165,7 +166,7 @@ const ctx = new Context({ autoGetResponse: false });
 ## Control Codes
 
 ```javascript
-const { ControlCode, Feature, parseFeaturesDetails, platformControlCode } = require("smartcard");
+import { ControlCode, Feature, parseFeaturesDetails, platformControlCode } from "pcsc-node";
 
 const featuresRaw = await reader.control(ControlCode.GET_FEATURE_REQUEST);
 const features = parseFeaturesDetails(featuresRaw);
@@ -206,7 +207,7 @@ State.CHANGED;
 ## Error Handling
 
 ```javascript
-const { Errors } = require("smartcard");
+import { Errors } from "pcsc-node";
 
 try {
   await reader.transmit([0x00, 0xa4, 0x04, 0x00]);
@@ -247,4 +248,6 @@ MIT
 
 ## Related Projects
 
-- [emv](https://github.com/tomkp/emv) - Interactive EMV chip card explorer built on smartcard.
+- [smartcard](https://github.com/tomkp/smartcard) - Source of this fork, very different now
+- [node-pcsclite](https://github.com/pokusew/node-pcsclite) - Uses older NaN abstraction, no longer compiles on newer node/electron
+- [pcsc-mini](https://github.com/liamcmitchell/pcsc-mini) - Written in TS/Zig, distributes pre-built binaries, doesn't work on electron

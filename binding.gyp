@@ -1,6 +1,6 @@
 {
     "targets": [{
-        "target_name": "smartcard_napi",
+        "target_name": "addon",
         "cflags!": ["-fno-exceptions"],
         "cflags_cc!": ["-fno-exceptions"],
         "sources": [
