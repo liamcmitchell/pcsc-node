@@ -20,7 +20,7 @@ import { SCARD_STATE_PRESENT, SCARD_PROTOCOL_T0, SCARD_PROTOCOL_T1 } from "../li
  * Returns [0x90, 0x00] for unrecognized commands.
  *
  * @param {Array<{command: Buffer | number[], response: Buffer | number[]}>} responses
- * @returns {(command: Buffer | number[], options?: object) => Promise<Buffer>}
+ * @returns {(command: Buffer | number[], maxRecvLength?: number) => Promise<Buffer>}
  */
 function responseMap(responses) {
   return async (command) => {
@@ -46,7 +46,7 @@ function responseMap(responses) {
  * @param {Buffer | null} [opts.atr]
  * @param {number} [opts.protocol]
  * @param {(shareMode?: number, protocols?: number) => Promise<void>} [opts.onConnect]
- * @param {(command: Buffer | number[], options?: object) => Promise<Buffer>} [opts.onTransmit]
+ * @param {(command: Buffer | number[], maxRecvLength?: number) => Promise<Buffer>} [opts.onTransmit]
  * @param {(code: number, data?: Buffer | number[]) => Promise<Buffer>} [opts.onControl]
  * @param {(disposition?: number) => void} [opts.onDisconnect]
  * @param {(shareMode?: number, protocol?: number, init?: number) => Promise<void>} [opts.onReconnect]
@@ -93,9 +93,9 @@ function createMockNativeReader(name, opts = {}) {
       _protocol = _cardProtocol;
     },
 
-    async transmit(command, options) {
+    async transmit(command, maxRecvLength) {
       reader.transmitCount++;
-      return reader.onTransmit(command, options);
+      return reader.onTransmit(command, maxRecvLength);
     },
 
     async control(code, data) {

@@ -181,28 +181,18 @@ Napi::Value PCSCReader::Transmit(const Napi::CallbackInfo& info) {
         return env.Null();
     }
 
-    std::vector<uint8_t> sendBuffer;
-
-    if (info[0].IsBuffer()) {
-        Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
-        sendBuffer.assign(buffer.Data(), buffer.Data() + buffer.Length());
-    } else if (info[0].IsArray()) {
-        Napi::Array arr = info[0].As<Napi::Array>();
-        sendBuffer.reserve(arr.Length());
-        for (uint32_t i = 0; i < arr.Length(); i++) {
-            sendBuffer.push_back(static_cast<uint8_t>(arr.Get(i).As<Napi::Number>().Uint32Value()));
-        }
-    } else {
-        Napi::TypeError::New(env, "Expected Buffer or Array").ThrowAsJavaScriptException();
+    if (!info[0].IsBuffer()) {
+        Napi::TypeError::New(env, "Expected Buffer").ThrowAsJavaScriptException();
         return env.Null();
     }
 
+    std::vector<uint8_t> sendBuffer;
+    Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+    sendBuffer.assign(buffer.Data(), buffer.Data() + buffer.Length());
+
     size_t maxRecvLength = 0;
-    if (info.Length() > 1 && info[1].IsObject()) {
-        Napi::Object options = info[1].As<Napi::Object>();
-        if (options.Has("maxRecvLength") && options.Get("maxRecvLength").IsNumber()) {
-            maxRecvLength = options.Get("maxRecvLength").As<Napi::Number>().Uint32Value();
-        }
+    if (info.Length() > 1 && info[1].IsNumber()) {
+        maxRecvLength = info[1].As<Napi::Number>().Uint32Value();
     }
 
     struct Result { std::vector<uint8_t> send, recv; DWORD len; };

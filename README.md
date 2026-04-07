@@ -1,13 +1,14 @@
 # pcsc-node
 
-PC/SC bindings for Node.js 22+.
+[PC/SC](https://en.wikipedia.org/wiki/PC/SC) bindings for Node.js 22+. Access hardware smart card readers and NFC devices on macOS, Windows, and Linux.
 
-- Built on N-API for ABI stability.
-- ES modules.
-- TS types in JSDoc.
-- No JS build step means you can fork & install from git.
+- Built on N-API for ABI stability, no need to recompile across node versions.
+- ES modules, TS types in JSDoc. No JS build step means you can fork & install from git.
+- Compatible with Electron.
 
 ## Install
+
+Not yet available on npm.
 
 ```bash
 npm install github:liamcmitchell/pcsc-node
@@ -17,7 +18,7 @@ npm install github:liamcmitchell/pcsc-node
 
 macOS and Windows are ready out of the box.
 
-Linux:
+Linux requires pcsclite headers for compilation and pcscd at runtime:
 
 ```bash
 sudo apt-get install libpcsclite-dev pcscd   # Debian/Ubuntu
@@ -69,7 +70,7 @@ ctx
     console.log("Card removed from", reader.name);
   })
   .on("error", (error) => {
-    console.error("Monitor error:", error.message);
+    console.error("Error:", error.message);
   })
   .start();
 
@@ -85,10 +86,13 @@ process.on("SIGINT", () => {
 class Context extends EventEmitter {
   constructor(options?: { autoConnect?: boolean; autoGetResponse?: boolean });
   readonly isValid: boolean;
+  // Currently attached readers.
   readonly readers: ReadonlyMap<string, Reader>;
+  // Start monitoring.
   start(): this;
-  // Starts monitoring automatically if it has not been started yet.
+  // Starts monitoring if needed and resolves after initial reader discovery has completed.
   getReaders(): Promise<ReadonlyMap<string, Reader>>;
+  // Stop monitoring.
   close(): void;
 }
 ```
@@ -106,10 +110,6 @@ Context events:
 | `error`  | `(error)`             | Fired for monitor errors or propagated reader operation errors without a reader-level error listener.                         |
 | `ready`  | `()`                  | Fired after initial startup events are processed (same lifecycle point as `await ctx.getReaders()`).                          |
 
-`getReaders()` starts monitoring if needed and resolves after initial reader discovery has completed.
-
-Set `PCSC_DEBUG=1` to enable native monitor logging in the format `[pcsc] <location> <bits> <reader>`, where location is a single character and bits are emitted in `UICNVEPAXSM` order.
-
 ## Reader
 
 ```typescript
@@ -120,14 +120,31 @@ class Reader extends EventEmitter {
   readonly connected: boolean;
   readonly protocol: number;
 
-  connect(shareMode?: number, preferredProtocols?: number): Promise<void>;
+  connect(
+    shareMode?: number, // ShareMode.SHARED | ShareMode.EXCLUSIVE | ShareMode.DIRECT
+    preferredProtocols?: number, // Protocol.T0 | Protocol.T1 | Protocol.RAW | Protocol.UNDEFINED
+  ): Promise<void>;
+
   transmit(
-    command: Buffer | number[],
-    options?: { maxRecvLength?: number; autoGetResponse?: boolean },
+    command: Buffer | number[], // APDU command bytes
+    maxRecvLength?: number, // max bytes to request (Le), default 256
+    autoGetResponse?: boolean, // enable/disable auto GET RESPONSE, default true
   ): Promise<Buffer>;
-  control(code: number, data?: Buffer | number[]): Promise<Buffer>;
-  reconnect(shareMode?: number, protocol?: number, initialization?: number): Promise<void>;
-  disconnect(disposition?: number): void;
+
+  control(
+    code: number, // control code
+    data?: Buffer | number[], // optional data payload
+  ): Promise<Buffer>;
+
+  reconnect(
+    shareMode?: number, // ShareMode.SHARED | ShareMode.EXCLUSIVE
+    protocol?: number, // Protocol.T0 | Protocol.T1 | Protocol.RAW
+    initialization?: number, // Disposition.LEAVE | Disposition.RESET | Disposition.UNPOWER | Disposition.EJECT
+  ): Promise<void>;
+
+  disconnect(
+    disposition?: number, // Disposition.LEAVE | Disposition.RESET | Disposition.UNPOWER | Disposition.EJECT
+  ): void;
 }
 ```
 
@@ -142,22 +159,50 @@ Reader events:
 | `remove` | `(reader)`            | Mirrors context `remove` for this reader instance.                                                       |
 | `error`  | `(error)`             | Reader-targeted operation errors (for example connect failures) when a reader error listener is present. |
 
-## Auto GET RESPONSE (T=0)
+## Transmit (Sending APDUs)
 
-Automatic handling is enabled by default for T=0 status words:
-
-- `61 xx`: sends GET RESPONSE automatically
-- `6C xx`: retries with corrected Le automatically
-
-Per-call opt-out:
+Send ISO 7816-4 APDUs (application protocol data units) and parse responses.
 
 ```javascript
-const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
-  autoGetResponse: false,
-});
+import { StatusWord, parseResponse, statusWordName } from "pcsc-node";
+
+// Send a command and receive response
+const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e, ...appId]);
+
+// Parse response into data + status word
+const { data, sw } = parseResponse(response);
+
+// Check common status words
+if (sw === StatusWord.OK) {
+  // Command succeeded
+  console.log("Selected:", data.toString("hex"));
+} else if (sw === StatusWord.FILE_OR_APPLICATION_NOT_FOUND) {
+  console.log("App not found");
+} else {
+  // Get human-readable name for unknown status words
+  console.log("Error:", statusWordName(sw));
+}
 ```
 
-Or disable it as a context default:
+**Response Parsing** (`parseResponse(buffer)`):
+Returns `{ sw1, sw2, sw, data }` where:
+
+- `sw1`, `sw2` — individual status bytes
+- `sw` — combined status word (sw1 << 8 | sw2)
+- `data` — response body (excludes status bytes)
+
+The `autoGetResponse` option only applies to T=0 protocol and handles status words:
+
+- `61 xx` — automatically sends GET RESPONSE
+- `6C xx` — automatically retries with corrected Le
+
+To disable for a specific call:
+
+```javascript
+const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], undefined, false);
+```
+
+Or disable by default for all calls:
 
 ```javascript
 const ctx = new Context({ autoGetResponse: false });
@@ -183,28 +228,7 @@ if (verify) {
 const customCode = platformControlCode(3500);
 ```
 
-## Constants
-
-```javascript
-ShareMode.EXCLUSIVE;
-ShareMode.SHARED;
-ShareMode.DIRECT;
-
-Protocol.T0;
-Protocol.T1;
-Protocol.RAW;
-
-Disposition.LEAVE;
-Disposition.RESET;
-Disposition.UNPOWER;
-Disposition.EJECT;
-
-State.PRESENT;
-State.EMPTY;
-State.CHANGED;
-```
-
-## Error Handling
+## Errors
 
 ```javascript
 import { Errors } from "pcsc-node";

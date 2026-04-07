@@ -647,7 +647,7 @@ describe("Context Integration", () => {
     await delay(0);
 
     const cmd = Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]);
-    const response = await cardEvents[0].transmit(cmd, { autoGetResponse: true });
+    const response = await cardEvents[0].transmit(cmd, undefined, true);
     assert.strictEqual(nativeReader.transmitCount, 1);
     assert(response.equals(Buffer.from([0x01, 0x90, 0x00])));
     ctx.close();
@@ -749,9 +749,10 @@ describe("Auto GET RESPONSE", () => {
   /**
    * @param {Array<{command: number[], response: number[]}>} cardResponses
    * @param {number[]} command
-   * @param {import('../lib/reader.js').TransmitOptions} [options]
+   * @param {number} [maxRecvLength]
+   * @param {boolean} [autoGetResponse]
    */
-  async function transmitViaReader(cardResponses, command, options) {
+  async function transmitViaReader(cardResponses, command, maxRecvLength, autoGetResponse) {
     const mock = createMockNative();
     const nativeReader = mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
@@ -765,7 +766,10 @@ describe("Auto GET RESPONSE", () => {
     await delay(0);
     const reader = cardEvents[0];
     try {
-      return { response: await reader.transmit(command, options), nativeReader };
+      return {
+        response: await reader.transmit(command, maxRecvLength, autoGetResponse),
+        nativeReader,
+      };
     } finally {
       ctx.close();
     }
@@ -785,7 +789,8 @@ describe("Auto GET RESPONSE", () => {
         },
       ],
       [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 2);
     assert.strictEqual(response.length, 30);
@@ -806,7 +811,8 @@ describe("Auto GET RESPONSE", () => {
         },
       ],
       [0x00, 0xb2, 0x01, 0x0c, 0x00],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 2);
     assert.strictEqual(response[response.length - 2], 0x90);
@@ -830,7 +836,8 @@ describe("Auto GET RESPONSE", () => {
         },
       ],
       [0x00, 0xca, 0x00, 0x00, 0x00],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 3);
     assert.strictEqual(response.length, 26);
@@ -846,7 +853,8 @@ describe("Auto GET RESPONSE", () => {
     const { response, nativeReader } = await transmitViaReader(
       [{ command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00] }],
       [0xff, 0xca, 0x00, 0x00, 0x00],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 1);
     assert(response.equals(Buffer.from([0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00])));
@@ -856,7 +864,8 @@ describe("Auto GET RESPONSE", () => {
     const { response, nativeReader } = await transmitViaReader(
       [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x61, 0x1c] }],
       [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: false },
+      undefined,
+      false,
     );
     assert.strictEqual(nativeReader.transmitCount, 1);
     assert(response.equals(Buffer.from([0x61, 0x1c])));
@@ -869,7 +878,7 @@ describe("Auto GET RESPONSE", () => {
         { command: [0x00, 0xc0, 0x00, 0x00, 0x1c], response: [0x90, 0x00] },
       ],
       [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      {},
+      undefined,
     );
     assert.strictEqual(nativeReader.transmitCount, 2);
     assert(response.equals(Buffer.from([0x90, 0x00])));
@@ -879,7 +888,8 @@ describe("Auto GET RESPONSE", () => {
     const { response, nativeReader } = await transmitViaReader(
       [{ command: [0x00, 0xa4, 0x04, 0x00, 0x0e], response: [0x6a, 0x82] }],
       [0x00, 0xa4, 0x04, 0x00, 0x0e],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 1);
     assert(response.equals(Buffer.from([0x6a, 0x82])));
@@ -892,15 +902,16 @@ describe("Auto GET RESPONSE", () => {
         { command: [0x00, 0xca, 0x9f, 0x17, 0x01], response: [0x03, 0x90, 0x00] },
       ],
       [0x00, 0xca, 0x9f, 0x17],
-      { autoGetResponse: true },
+      undefined,
+      true,
     );
     assert.strictEqual(nativeReader.transmitCount, 2);
     assert(response.equals(Buffer.from([0x03, 0x90, 0x00])));
   });
 });
 
-describe("reader.transmit() autoGetResponse option", () => {
-  it("should handle SW1=61 when autoGetResponse option is passed to reader.transmit()", async () => {
+describe("reader.transmit() autoGetResponse argument", () => {
+  it("should handle SW1=61 when autoGetResponse argument is passed to reader.transmit()", async () => {
     const mock = createMockNative();
     const nativeReader = mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
@@ -928,9 +939,7 @@ describe("reader.transmit() autoGetResponse option", () => {
     assert.strictEqual(cardEvents.length, 1, "Should have card-inserted event");
     const reader = cardEvents[0];
 
-    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
-      autoGetResponse: true,
-    });
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], undefined, true);
 
     assert.strictEqual(nativeReader.transmitCount, 2, "Should have sent 2 commands");
     assert.strictEqual(response.length, 30, "Response should be 30 bytes");
@@ -940,7 +949,7 @@ describe("reader.transmit() autoGetResponse option", () => {
     ctx.close();
   });
 
-  it("should handle SW1=6C when autoGetResponse option is passed to reader.transmit()", async () => {
+  it("should handle SW1=6C when autoGetResponse argument is passed to reader.transmit()", async () => {
     const mock = createMockNative();
     const nativeReader = mock.attachReader("Test Reader", {
       atr: Buffer.from([0x3b, 0x8f]),
@@ -965,9 +974,7 @@ describe("reader.transmit() autoGetResponse option", () => {
     await delay(0);
 
     const reader = cardEvents[0];
-    const response = await reader.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], {
-      autoGetResponse: true,
-    });
+    const response = await reader.transmit([0x00, 0xb2, 0x01, 0x0c, 0x00], undefined, true);
 
     assert.strictEqual(nativeReader.transmitCount, 2, "Should have sent 2 commands");
     assert.strictEqual(response[response.length - 2], 0x90);
@@ -1059,9 +1066,7 @@ describe("reader.transmit() autoGetResponse option", () => {
     await delay(0);
 
     const reader = cardEvents[0];
-    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], {
-      autoGetResponse: false,
-    });
+    const response = await reader.transmit([0x00, 0xa4, 0x04, 0x00, 0x0e], undefined, false);
 
     assert.strictEqual(nativeReader.transmitCount, 1, "Should only transmit once");
     assert(response.equals(Buffer.from([0x61, 0x1c])), "Should return raw response");
