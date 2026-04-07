@@ -28,7 +28,7 @@ public:
         if (result_ == SCARD_S_SUCCESS) {
             deferred_.Resolve(resolve_(env));
         } else {
-            deferred_.Reject(Napi::Error::New(env, GetPCSCErrorString(result_)).Value());
+            deferred_.Reject(CreatePCSCError(env, result_).Value());
         }
     }
 
@@ -290,7 +290,7 @@ Napi::Value PCSCReader::Disconnect(const Napi::CallbackInfo& info) {
     card_ = 0;
 
     if (result != SCARD_S_SUCCESS) {
-        Napi::Error::New(env, GetPCSCErrorString(result)).ThrowAsJavaScriptException();
+        ThrowPCSCError(env, result);
     }
 
     return env.Undefined();

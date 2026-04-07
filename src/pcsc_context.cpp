@@ -14,6 +14,7 @@ struct EventData {
     std::string eventType;
     std::string readerName;
     DWORD state;
+    DWORD code;
     std::vector<uint8_t> atr;
     SCARDCONTEXT context;  // For creating PCSCReader on "attached"
 };
@@ -42,7 +43,7 @@ PCSCContext::PCSCContext(const Napi::CallbackInfo& info)
     LONG result = SCardEstablishContext(SCARD_SCOPE_SYSTEM, nullptr, nullptr, &context_);
 
     if (result != SCARD_S_SUCCESS) {
-        Napi::Error::New(env, GetPCSCErrorString(result)).ThrowAsJavaScriptException();
+        ThrowPCSCError(env, result);
         return;
     }
 
@@ -259,7 +260,13 @@ void PCSCContext::MonitorLoop() {
         }
 
         if (result != SCARD_S_SUCCESS) {
-            EmitEvent("error", GetPCSCErrorString(result), 0, {});
+            EmitEvent(
+                "error",
+                GetPCSCErrorString(result),
+                0,
+                {},
+                static_cast<DWORD>(GetPCSCErrorCode(result))
+            );
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             continue;
         }
@@ -327,9 +334,9 @@ void PCSCContext::MonitorLoop() {
 }
 
 void PCSCContext::EmitEvent(const std::string& eventType, const std::string& readerName,
-                             DWORD state, const std::vector<uint8_t>& atr) {
+                             DWORD state, const std::vector<uint8_t>& atr, DWORD code) {
     LogPcscEvent(eventType, readerName);
-    auto data = std::make_shared<EventData>(EventData{eventType, readerName, state, atr, context_});
+    auto data = std::make_shared<EventData>(EventData{eventType, readerName, state, code, atr, context_});
 
     auto status = tsfn_.NonBlockingCall([data](Napi::Env env, Napi::Function callback) {
         auto ptr = data.get();
@@ -338,6 +345,7 @@ void PCSCContext::EmitEvent(const std::string& eventType, const std::string& rea
         event.Set("type", Napi::String::New(env, ptr->eventType));
         event.Set("name", Napi::String::New(env, ptr->readerName));
         event.Set("state", Napi::Number::New(env, ptr->state));
+        event.Set("code", Napi::Number::New(env, ptr->code));
 
         if (!ptr->atr.empty()) {
             event.Set("atr", Napi::Buffer<uint8_t>::Copy(env, ptr->atr.data(), ptr->atr.size()));

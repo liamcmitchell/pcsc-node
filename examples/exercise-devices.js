@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Exercise both known readers with a PKI card.
+ * Safely excercise as much of the API as possible in a single command.
  *
  * Usage:
  *   node examples/exercise-devices.js
@@ -12,6 +12,7 @@ import {
   Protocol,
   Disposition,
   ControlCode,
+  parseFeaturesDetails,
   parseResponse,
   protocolName,
   statusWordName,
@@ -34,9 +35,8 @@ async function safeTransmit(reader, name, command) {
 }
 
 async function main() {
-  console.log("Smartcard Device Exercise");
+  console.log("Exercise devices");
   console.log("========================");
-  console.log("Safe checks are enabled by default.\n");
 
   const ctx = new Context();
 
@@ -73,35 +73,46 @@ async function main() {
         "GET CHALLENGE (0084000008)",
         Buffer.from([0x00, 0x84, 0x00, 0x00, 0x08]),
       );
+      await safeTransmit(
+        reader,
+        "INTENTIONAL ERROR (00FF000000)",
+        Buffer.from([0x00, 0xff, 0x00, 0x00, 0x00]),
+      );
+
+      try {
+        await reader.control("not-a-number", Buffer.alloc(0));
+      } catch (error) {
+        console.log(`  INTENTIONAL JS EXCEPTION (invalid control arg): ${error.message}`);
+      }
+
+      try {
+        await reader.control(0, Buffer.alloc(0));
+      } catch (error) {
+        const code = typeof error?.code === "number" ? toHex(error.code) : "<none>";
+        console.log(`  INTENTIONAL PCSC ERROR (control code=0): ${error.message} (code=${code})`);
+      }
 
       try {
         const response = await reader.control(ControlCode.GET_FEATURE_REQUEST, Buffer.alloc(0));
+        const features = parseFeaturesDetails(response);
         console.log(
-          `  GET_FEATURE_REQUEST (${toHex(ControlCode.GET_FEATURE_REQUEST)}): ${formatHex(response) || "<empty>"}`,
+          `  GET_FEATURE_REQUEST (${toHex(ControlCode.GET_FEATURE_REQUEST)}): ${features.length} features`,
         );
+        for (const feature of features) {
+          console.log(`    ${feature.name}: ${toHex(feature.controlCode)}`);
+        }
       } catch (error) {
         console.log(`  GET_FEATURE_REQUEST: ${error.message}`);
       }
 
       let exclusiveReady = false;
       let lastError = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.LEAVE);
-          exclusiveReady = true;
-          if (attempt > 1) {
-            console.log(`  reconnect(exclusive/no-reset): ok (attempt ${attempt}/3)`);
-          } else {
-            console.log("  reconnect(exclusive/no-reset): ok");
-          }
-          break;
-        } catch (error) {
-          lastError = error;
-          if (attempt < 3) {
-            console.log(`  reconnect(exclusive/no-reset): retry ${attempt}/3 (${error.message})`);
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        }
+      try {
+        await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.LEAVE);
+        exclusiveReady = true;
+        console.log("  reconnect(exclusive/no-reset): ok");
+      } catch (error) {
+        lastError = error;
       }
 
       if (!exclusiveReady) {

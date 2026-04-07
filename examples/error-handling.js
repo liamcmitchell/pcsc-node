@@ -5,7 +5,7 @@
  * Usage: node error-handling.js
  */
 
-import { Context, Disposition, PCSCError, NoCardError } from "../lib/index.js";
+import { Context, Disposition, Errors } from "../lib/index.js";
 
 async function main() {
   const ctx = new Context();
@@ -27,10 +27,10 @@ async function main() {
       await reader.transmit([0xff, 0xca, 0x00, 0x00, 0x00]);
       console.log("Command succeeded.");
     } catch (error) {
-      if (error instanceof NoCardError) {
+      if (error?.code === Errors.CARD_REMOVED) {
         console.error("No card inserted.");
-      } else if (error instanceof PCSCError) {
-        console.error(`Smart card error: ${error.message} (0x${error.code?.toString(16)})`);
+      } else if (typeof error?.code === "number") {
+        console.error(`Smart card error: ${error.message} (0x${error.code.toString(16)})`);
       } else {
         console.error(`Unknown reader error: ${error.message}`);
       }

@@ -46,6 +46,6 @@ private:
     // Internal monitoring methods
     void MonitorLoop();
     void EmitEvent(const std::string& eventType, const std::string& readerName,
-                   DWORD state, const std::vector<uint8_t>& atr);
+                   DWORD state, const std::vector<uint8_t>& atr, DWORD code = 0);
     void StopMonitorInternal();
 };

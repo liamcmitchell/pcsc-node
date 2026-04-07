@@ -1,5 +1,6 @@
 #pragma once
 
+#include <napi.h>
 #include "platform/pcsc.h"
 
 // Convert PC/SC error codes to human-readable strings
@@ -46,4 +47,15 @@ inline const char* GetPCSCErrorString(LONG code) {
 // Get the error code value
 inline LONG GetPCSCErrorCode(LONG code) {
     return code;
+}
+
+// Create a JavaScript Error with stable numeric PC/SC code metadata.
+inline Napi::Error CreatePCSCError(Napi::Env env, LONG code) {
+    Napi::Error error = Napi::Error::New(env, GetPCSCErrorString(code));
+    error.Value().Set("code", Napi::Number::New(env, static_cast<double>(static_cast<DWORD>(code))));
+    return error;
+}
+
+inline void ThrowPCSCError(Napi::Env env, LONG code) {
+    CreatePCSCError(env, code).ThrowAsJavaScriptException();
 }

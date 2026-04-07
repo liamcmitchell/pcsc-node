@@ -185,19 +185,17 @@ State.CHANGED;
 ## Error Handling
 
 ```javascript
-const { PCSCError, CardRemovedError, SharingViolationError } = require("smartcard");
+const { Errors } = require("smartcard");
 
 try {
   await reader.transmit([0x00, 0xa4, 0x04, 0x00]);
 } catch (error) {
-  if (error instanceof CardRemovedError) {
+  if (error?.code === Errors.CARD_REMOVED) {
     console.log("Card removed");
-  } else if (error instanceof SharingViolationError) {
+  } else if (error?.code === Errors.SHARING_VIOLATION) {
     console.log("Card is in use elsewhere");
-  } else if (error instanceof PCSCError) {
-    console.log(`PC/SC error 0x${error.code.toString(16)}: ${error.message}`);
   } else {
-    throw error;
+    console.log(`Error: ${error.message}`);
   }
 }
 ```

@@ -7,7 +7,7 @@
  * Press Ctrl+C to stop monitoring.
  */
 
-import { Context, StatusWord, parseResponse } from "../lib/index.js";
+import { Context, Errors, StatusWord, parseResponse } from "../lib/index.js";
 
 console.log("PC/SC Card Monitor");
 console.log("==================");
@@ -45,9 +45,14 @@ const context = new Context()
     console.log(`[*] Card removed from: ${reader.name}\n`);
   })
   .on("error", (err) => {
-    // Ignore common transient errors
-    const ignorable = ["unresponsive", "Sharing violation", "cancelled"];
-    if (!ignorable.some((msg) => err.message.includes(msg))) {
+    // Ignore common transient PC/SC errors by stable code.
+    const ignoredCodes = new Set([
+      Errors.CARD_UNRESPONSIVE,
+      Errors.SHARING_VIOLATION,
+      Errors.CANCELLED,
+      Errors.SYSTEM_CANCELLED,
+    ]);
+    if (!ignoredCodes.has(err?.code)) {
       console.error(`[!] Error: ${err.message}`);
     }
   })
