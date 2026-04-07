@@ -179,6 +179,36 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
+  it("should continue processing events when a listener throws", async () => {
+    const mock = createMockNative();
+    const events = [];
+
+    const ctx = startContext({
+      _nativeContext: mock,
+      attach: () => {
+        events.push("attach");
+        throw new Error("attach failed");
+      },
+      detach: () => {
+        events.push("detach");
+      },
+      error: (err) => {
+        events.push(`error:${err.message}`);
+      },
+    });
+
+    mock.attachReader("ACR122U");
+    await delay(0);
+    mock.detachReader("ACR122U");
+    await delay(0);
+
+    assert(events.includes("attach"));
+    assert(events.some((event) => event.startsWith("error:attach failed")));
+    assert(events.includes("detach"));
+
+    ctx.close();
+  });
+
   it("should reuse the same reader object when detached and reattached", async () => {
     const mock = createMockNative();
     const attached = [];
