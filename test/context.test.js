@@ -8,7 +8,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function startContext(options = {}) {
   const ctx = new Context(options);
-  for (const eventName of ["attach", "detach", "change", "insert", "remove", "error"]) {
+  for (const eventName of ["reader", "attach", "detach", "change", "insert", "remove", "error"]) {
     const listener = options[eventName];
     if (listener) {
       ctx.on(eventName, listener);
@@ -35,6 +35,40 @@ describe("Context Integration", () => {
     assert.strictEqual(events[0].name, "ACR122U");
     assert.strictEqual(typeof events[0].connect, "function");
     assert.strictEqual(typeof events[0].transmit, "function");
+
+    ctx.close();
+  });
+
+  it("should emit reader once and before attach for each reader instance", async () => {
+    const mock = createMockNative();
+    const sequence = [];
+    const readerEvents = [];
+    const attachEvents = [];
+
+    const ctx = startContext({
+      _nativeContext: mock,
+      reader: (reader) => {
+        sequence.push(`reader:${reader.name}`);
+        readerEvents.push(reader);
+      },
+      attach: (reader) => {
+        sequence.push(`attach:${reader.name}`);
+        attachEvents.push(reader);
+      },
+    });
+
+    mock.attachReader("ACR122U");
+    await delay(0);
+    mock.detachReader("ACR122U");
+    await delay(0);
+    mock.attachReader("ACR122U");
+    await delay(0);
+
+    assert.strictEqual(readerEvents.length, 1);
+    assert.strictEqual(attachEvents.length, 2);
+    assert.strictEqual(readerEvents[0], attachEvents[0]);
+    assert.strictEqual(attachEvents[0], attachEvents[1]);
+    assert.deepStrictEqual(sequence, ["reader:ACR122U", "attach:ACR122U", "attach:ACR122U"]);
 
     ctx.close();
   });

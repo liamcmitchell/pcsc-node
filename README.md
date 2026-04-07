@@ -32,7 +32,7 @@ There is one API surface:
 Typical flow:
 
 1. Create `new Context()`
-2. Register event listeners (`attach`, `detach`, `insert`, `remove`, `change`, `error`)
+2. Register event listeners (`reader`, `attach`, `detach`, `insert`, `remove`, `change`, `error`)
 3. Call `start()`
 4. Use `reader` methods inside event handlers
 5. Call `close()` on shutdown
@@ -81,31 +81,37 @@ process.on("SIGINT", () => {
 ## Context
 
 ```typescript
-class Context {
+class Context extends EventEmitter {
   constructor(options?: { autoConnect?: boolean; autoGetResponse?: boolean });
   readonly isValid: boolean;
   readonly readers: ReadonlyMap<string, Reader>;
   start(): this;
   close(): void;
-
-  on(event: "attach", listener: (reader: Reader) => void): this;
-  on(event: "detach", listener: (reader: Reader) => void): this;
-  on(event: "change", listener: (reader: Reader, prevState: number) => void): this;
-  on(event: "insert", listener: (reader: Reader) => void): this;
-  on(event: "remove", listener: (reader: Reader) => void): this;
-  on(event: "error", listener: (error: Error) => void): this;
 }
 ```
+
+Context events:
+
+| Event    | Args                  | Description                                                                                                                   |
+| -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `reader` | `(reader)`            | Fired once when a new `Reader` instance is created for a reader name. This fires before the first `attach` for that instance. |
+| `attach` | `(reader)`            | Fired when a reader becomes available. Can fire multiple times for the same `Reader` instance after detach/reattach.          |
+| `detach` | `(reader)`            | Fired when a reader is removed/unavailable.                                                                                   |
+| `change` | `(reader, prevState)` | Fired when PC/SC state flags change for a currently attached reader.                                                          |
+| `insert` | `(reader)`            | Fired when a card becomes present. If `autoConnect` is enabled, connection is established before this event.                  |
+| `remove` | `(reader)`            | Fired when a card is removed or when a connected reader is detached.                                                          |
+| `error`  | `(error)`             | Fired for monitor errors or propagated reader operation errors without a reader-level error listener.                         |
+| `ready`  | `()`                  | Fired after initial startup events are processed.                                                                             |
 
 Set `PCSC_DEBUG=1` to enable native monitor logging in the format `[pcsc] <location> <bits> <reader>`, where location is a single character and bits are emitted in `UICNVEPAXSM` order.
 
 ## Reader
 
 ```typescript
-class Reader {
+class Reader extends EventEmitter {
   readonly name: string;
-  state: number;
-  atr: Buffer | null;
+  readonly state: number;
+  readonly atr: Buffer | null;
   readonly connected: boolean;
   readonly protocol: number;
 
@@ -119,6 +125,17 @@ class Reader {
   disconnect(disposition?: number): void;
 }
 ```
+
+Reader events:
+
+| Event    | Args                  | Description                                                                                              |
+| -------- | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attach` | `(reader)`            | Mirrors context `attach` for this reader instance.                                                       |
+| `detach` | `(reader)`            | Mirrors context `detach` for this reader instance.                                                       |
+| `change` | `(reader, prevState)` | Mirrors context `change` for this reader instance.                                                       |
+| `insert` | `(reader)`            | Mirrors context `insert` for this reader instance.                                                       |
+| `remove` | `(reader)`            | Mirrors context `remove` for this reader instance.                                                       |
+| `error`  | `(error)`             | Reader-targeted operation errors (for example connect failures) when a reader error listener is present. |
 
 ## Auto GET RESPONSE (T=0)
 
