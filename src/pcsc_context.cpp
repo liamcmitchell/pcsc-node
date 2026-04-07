@@ -21,7 +21,7 @@ struct EventData {
 
 
 Napi::Object PCSCContext::Init(Napi::Env env, Napi::Object exports) {
-    Napi::Function func = DefineClass(env, "Context", {
+    Napi::Function func = DefineClass(env, "PCSCContext", {
         InstanceMethod("startMonitor", &PCSCContext::StartMonitor),
         InstanceMethod("stopMonitor", &PCSCContext::StopMonitor),
         InstanceMethod("close", &PCSCContext::Close),
@@ -31,7 +31,7 @@ Napi::Object PCSCContext::Init(Napi::Env env, Napi::Object exports) {
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
 
-    exports.Set("Context", func);
+    exports.Set("PCSCContext", func);
     return exports;
 }
 

@@ -53,7 +53,7 @@ static Napi::Value RunAsync(Napi::Env env,
 }
 
 Napi::Object PCSCReader::Init(Napi::Env env, Napi::Object exports) {
-    Napi::Function func = DefineClass(env, "Reader", {
+    Napi::Function func = DefineClass(env, "PCSCReader", {
         InstanceAccessor("name", &PCSCReader::GetName, nullptr),
         InstanceAccessor("protocol", &PCSCReader::GetProtocolValue, nullptr),
         InstanceAccessor("connected", &PCSCReader::GetConnectedValue, nullptr),
@@ -68,7 +68,7 @@ Napi::Object PCSCReader::Init(Napi::Env env, Napi::Object exports) {
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
 
-    exports.Set("Reader", func);
+    exports.Set("PCSCReader", func);
     return exports;
 }
 
