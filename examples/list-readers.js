@@ -4,10 +4,10 @@ async function main() {
   const ctx = new Context({ autoConnect: false });
 
   try {
-    await ctx.start().whenReady();
+    const readers = await ctx.getReaders();
 
-    console.log(`Readers: ${ctx.readers.size}`);
-    for (const reader of ctx.readers.values()) {
+    console.log(`Readers: ${readers.size}`);
+    for (const reader of readers.values()) {
       console.log(`- ${reader.name}`);
     }
   } catch (error) {

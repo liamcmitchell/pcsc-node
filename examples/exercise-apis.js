@@ -35,10 +35,10 @@ async function main() {
   ctx.on("error", (error) => console.log(`[error] ${error.message}`));
 
   try {
-    await ctx.start().whenReady();
+    const readers = await ctx.getReaders();
 
-    console.log(`Available readers: ${ctx.readers.size}`);
-    const readerTasks = [...ctx.readers.values()].map(async (reader) => {
+    console.log(`Available readers: ${readers.size}`);
+    const readerTasks = [...readers.values()].map(async (reader) => {
       if (!reader.connected) {
         console.log(`${reader.name}: waiting for card...`);
         await new Promise((resolve) => {

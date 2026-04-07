@@ -33,7 +33,7 @@ Typical flow:
 
 1. Create `new Context()`
 2. Register event listeners (`reader`, `attach`, `detach`, `insert`, `remove`, `change`, `error`)
-3. Call `start()`
+3. Call `start()` or call `getReaders()` (auto-start)
 4. Use `reader` methods inside event handlers
 5. Call `close()` on shutdown
 
@@ -86,6 +86,8 @@ class Context extends EventEmitter {
   readonly isValid: boolean;
   readonly readers: ReadonlyMap<string, Reader>;
   start(): this;
+  // Starts monitoring automatically if it has not been started yet.
+  getReaders(): Promise<ReadonlyMap<string, Reader>>;
   close(): void;
 }
 ```
@@ -101,7 +103,9 @@ Context events:
 | `insert` | `(reader)`            | Fired when a card becomes present. If `autoConnect` is enabled, connection is established before this event.                  |
 | `remove` | `(reader)`            | Fired when a card is removed or when a connected reader is detached.                                                          |
 | `error`  | `(error)`             | Fired for monitor errors or propagated reader operation errors without a reader-level error listener.                         |
-| `ready`  | `()`                  | Fired after initial startup events are processed.                                                                             |
+| `ready`  | `()`                  | Fired after initial startup events are processed (same lifecycle point as `await ctx.getReaders()`).                          |
+
+`getReaders()` starts monitoring if needed and resolves after initial reader discovery has completed.
 
 Set `PCSC_DEBUG=1` to enable native monitor logging in the format `[pcsc] <location> <bits> <reader>`, where location is a single character and bits are emitted in `UICNVEPAXSM` order.
 

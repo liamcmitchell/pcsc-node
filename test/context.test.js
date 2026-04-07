@@ -237,8 +237,21 @@ describe("Context Integration", () => {
 
     assert.strictEqual(ctx.readers.size, 0);
 
-    await ctx.whenReady();
+    await ctx.getReaders();
     assert.strictEqual(ctx.readers.size, 1);
+
+    ctx.close();
+  });
+
+  it("getReaders should auto-start monitoring", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+
+    const ctx = new Context({ _nativeContext: mock, autoConnect: false });
+    const readers = await ctx.getReaders();
+
+    assert.strictEqual(readers.size, 1);
+    assert.strictEqual(readers.get("ACR122U")?.name, "ACR122U");
 
     ctx.close();
   });
@@ -311,30 +324,28 @@ describe("Context Integration", () => {
     ctx.close();
   });
 
-  it("whenReady should include initial auto-connect", async () => {
+  it("getReaders should include initial auto-connect", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
     const ctx = new Context({ _nativeContext: mock });
-    ctx.start();
-    await ctx.whenReady();
+    const readers = await ctx.start().getReaders();
 
-    assert.strictEqual(ctx.readers.size, 1);
-    assert.strictEqual(ctx.readers.get("ACR122U")?.connected, true);
+    assert.strictEqual(readers.size, 1);
+    assert.strictEqual(readers.get("ACR122U")?.connected, true);
 
     ctx.close();
   });
 
-  it("whenReady should resolve with initial readers when autoConnect is false", async () => {
+  it("getReaders should resolve with initial readers when autoConnect is false", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]) });
 
     const ctx = new Context({ _nativeContext: mock, autoConnect: false });
-    ctx.start();
-    await ctx.whenReady();
+    const readers = await ctx.start().getReaders();
 
-    assert.strictEqual(ctx.readers.size, 1);
-    assert.strictEqual(ctx.readers.get("ACR122U")?.connected, false);
+    assert.strictEqual(readers.size, 1);
+    assert.strictEqual(readers.get("ACR122U")?.connected, false);
 
     ctx.close();
   });
