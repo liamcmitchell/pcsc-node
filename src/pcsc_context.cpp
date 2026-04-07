@@ -16,7 +16,6 @@ struct EventData {
     DWORD state;
     DWORD code;
     std::vector<uint8_t> atr;
-    SCARDCONTEXT context;  // For creating PCSCReader on "attached"
 };
 
 
@@ -336,7 +335,7 @@ void PCSCContext::MonitorLoop() {
 void PCSCContext::EmitEvent(const std::string& eventType, const std::string& readerName,
                              DWORD state, const std::vector<uint8_t>& atr, DWORD code) {
     LogPcscEvent(eventType, readerName);
-    auto data = std::make_shared<EventData>(EventData{eventType, readerName, state, code, atr, context_});
+    auto data = std::make_shared<EventData>(EventData{eventType, readerName, state, code, atr});
 
     auto status = tsfn_.NonBlockingCall([data](Napi::Env env, Napi::Function callback) {
         auto ptr = data.get();
@@ -354,7 +353,7 @@ void PCSCContext::EmitEvent(const std::string& eventType, const std::string& rea
         }
 
         if (ptr->eventType == "attached") {
-            event.Set("nativeReader", PCSCReader::NewInstance(env, ptr->context, ptr->readerName));
+            event.Set("nativeReader", PCSCReader::NewInstance(env, ptr->readerName));
         }
 
         callback.Call({event});

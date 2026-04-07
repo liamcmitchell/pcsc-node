@@ -8,8 +8,7 @@
 class PCSCReader : public Napi::ObjectWrap<PCSCReader> {
 public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
-    static Napi::Object NewInstance(Napi::Env env, SCARDCONTEXT context,
-                                     const std::string& readerName);
+    static Napi::Object NewInstance(Napi::Env env, const std::string& readerName);
 
     PCSCReader(const Napi::CallbackInfo& info);
     ~PCSCReader();

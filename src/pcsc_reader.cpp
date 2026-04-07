@@ -94,11 +94,9 @@ Napi::Object PCSCReader::Init(Napi::Env env, Napi::Object exports) {
     return exports;
 }
 
-Napi::Object PCSCReader::NewInstance(Napi::Env env, SCARDCONTEXT context,
-                                    const std::string& readerName) {
+Napi::Object PCSCReader::NewInstance(Napi::Env env, const std::string& readerName) {
     Napi::Object obj = constructor.New({});
     PCSCReader* readerObj = Napi::ObjectWrap<PCSCReader>::Unwrap(obj);
-    readerObj->context_ = context;
     readerObj->readerName_ = readerName;
     return obj;
 }
@@ -117,6 +115,10 @@ PCSCReader::~PCSCReader() {
         SCardDisconnect(card_, SCARD_LEAVE_CARD);
         connected_ = false;
         card_ = 0;
+    }
+    if (context_ != 0) {
+        SCardReleaseContext(context_);
+        context_ = 0;
     }
 }
 
@@ -179,7 +181,11 @@ Napi::Value PCSCReader::Connect(const Napi::CallbackInfo& info) {
     return RunAsync(env,
         "SCardConnect",
         readerName_,
-        [this, shareMode, preferredProtocols, result]() {
+        [this, shareMode, preferredProtocols, result]() -> LONG {
+            if (context_ == 0) {
+                LONG rc = SCardEstablishContext(SCARD_SCOPE_SYSTEM, nullptr, nullptr, &context_);
+                if (rc != SCARD_S_SUCCESS) return rc;
+            }
             return SCardConnect(context_, readerName_.c_str(),
                 shareMode, preferredProtocols, &result->card, &result->protocol);
         },
