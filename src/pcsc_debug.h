@@ -1,8 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include "platform/pcsc.h"
 
@@ -45,23 +47,50 @@ inline std::string FormatStateBits(DWORD state) {
     return bits;
 }
 
+// Format local wall-clock time as HH:MM:SS.mmm.
+inline std::string PcscTimestamp() {
+    using clock = std::chrono::system_clock;
+    const auto now = clock::now();
+    const auto tt = clock::to_time_t(now);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &tt);
+#else
+    localtime_r(&tt, &tm);
+#endif
+
+    char buf[16];
+    std::snprintf(
+        buf,
+        sizeof(buf),
+        "%02d:%02d:%02d.%03d",
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        static_cast<int>(ms.count()));
+    return std::string(buf);
+}
+
 // Log a PCSC API call. hint is optional context (e.g. reader name or call-site label).
 inline void LogPcscCall(const char* fn, const std::string& hint = "") {
     if (!PcscDebugEnabled()) return;
     if (hint.empty())
-        std::fprintf(stderr, "[pcsc] %s\n", fn);
+        std::fprintf(stderr, "%s %s\n", PcscTimestamp().c_str(), fn);
     else
-        std::fprintf(stderr, "[pcsc] %s %s\n", fn, hint.c_str());
+        std::fprintf(stderr, "%s %s %s\n", PcscTimestamp().c_str(), fn, hint.c_str());
 }
 
 // Log raw reader state bits returned by SCardGetStatusChange.
 inline void LogPcscState(const std::string& readerName, DWORD state) {
     if (!PcscDebugEnabled()) return;
-    std::fprintf(stderr, "[pcsc] %s %s\n", FormatStateBits(state).c_str(), readerName.c_str());
+    std::fprintf(stderr, "%s %s %s\n", PcscTimestamp().c_str(), FormatStateBits(state).c_str(), readerName.c_str());
 }
 
 // Log a JS monitor event being emitted.
 inline void LogPcscEvent(const std::string& eventType, const std::string& readerName) {
     if (!PcscDebugEnabled()) return;
-    std::fprintf(stderr, "[pcsc] event %-8s %s\n", eventType.c_str(), readerName.c_str());
+    std::fprintf(stderr, "%s event %-8s %s\n", PcscTimestamp().c_str(), eventType.c_str(), readerName.c_str());
 }
