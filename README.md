@@ -86,7 +86,7 @@ process.on("SIGINT", () => {
 class Context extends EventEmitter {
   constructor(options?: { autoConnect?: boolean; autoGetResponse?: boolean });
   readonly isValid: boolean;
-  // Currently attached readers.
+  // All known readers, currently or previously attached.
   readonly readers: ReadonlyMap<string, Reader>;
   // Start monitoring.
   start(): this;
@@ -115,6 +115,7 @@ Context events:
 ```typescript
 class Reader extends EventEmitter {
   readonly name: string;
+  readonly attached: boolean;
   readonly state: number;
   readonly atr: Buffer | null;
   readonly connected: boolean;

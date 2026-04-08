@@ -179,6 +179,7 @@ describe("Context Integration", () => {
 
     assert(events.includes("attached"));
     assert(events.includes("detached"));
+    assert.strictEqual(ctx.readers.get("ACR122U")?.attached, false);
 
     ctx.close();
   });
@@ -257,9 +258,29 @@ describe("Context Integration", () => {
     assert(ctx.readers.has("Reader 1"));
     assert(ctx.readers.has("Reader 2"));
     assert.strictEqual(ctx.readers.get("Reader 1").name, "Reader 1");
+    assert.strictEqual(ctx.readers.get("Reader 1")?.attached, true);
 
     ctx.close();
     assert.strictEqual(ctx.readers.size, 0);
+  });
+
+  it("should keep detached readers in context.readers", async () => {
+    const mock = createMockNative();
+    mock.attachReader("ACR122U");
+
+    const ctx = startContext({ _nativeContext: mock });
+
+    await delay(0);
+    assert.strictEqual(ctx.readers.size, 1);
+    assert.strictEqual(ctx.readers.get("ACR122U")?.attached, true);
+
+    mock.detachReader("ACR122U");
+    await delay(0);
+
+    assert.strictEqual(ctx.readers.size, 1);
+    assert.strictEqual(ctx.readers.get("ACR122U")?.attached, false);
+
+    ctx.close();
   });
 
   it("should keep readers empty immediately after start", async () => {
