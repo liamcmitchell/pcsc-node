@@ -3,7 +3,7 @@
 [PC/SC](https://en.wikipedia.org/wiki/PC/SC) bindings for Node.js 22+. Access hardware smart card readers and NFC devices on macOS, Windows, and Linux.
 
 - Built on N-API for ABI stability, no need to recompile across node versions.
-- ES modules, TS types in JSDoc. No JS build step means you can fork & install from git.
+- ES modules, TS types. No JS build step means you can fork & install from git.
 - Compatible with Electron.
 
 ## Install

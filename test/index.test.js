@@ -14,11 +14,16 @@ describe("Package Exports", () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
     assert(packageJson.exports, "exports field should exist");
-    assert.strictEqual(
-      packageJson.exports["."],
-      "./lib/index.js",
-      'exports["."] should point to lib/index.js',
-    );
+    assert.deepStrictEqual(packageJson.exports["."], {
+      types: "./lib/index.d.ts",
+      default: "./lib/index.js",
+    });
+  });
+
+  it("should have types field for TypeScript consumers", () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+
+    assert.strictEqual(packageJson.types, "./lib/index.d.ts");
   });
 
   it("should have type: module for ESM", () => {
