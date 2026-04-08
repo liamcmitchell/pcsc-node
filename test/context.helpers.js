@@ -13,7 +13,7 @@
 /** @typedef {import('../lib/native.js').NativeContext} NativeContext */
 /** @typedef {import('../lib/native.js').NativeReader} NativeReader */
 
-import { SCARD_STATE_PRESENT, SCARD_PROTOCOL_T0, SCARD_PROTOCOL_T1 } from "../lib/native.js";
+import { SCARD_STATE_PRESENT, SCARD_PROTOCOL_T0 } from "../lib/native.js";
 
 /**
  * Create a response-map based transmit handler.

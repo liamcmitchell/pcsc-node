@@ -54,14 +54,14 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
-    "node-addon-api": "^7.0.0"
+    "node-addon-api": "^8.7.0"
   },
   "devDependencies": {
-    "@types/node": "^25.0.3",
-    "c8": "^10.1.3",
+    "@types/node": "^25.5.2",
+    "c8": "^11.0.0",
     "node-gyp": "^12.2.0",
-    "oxfmt": "^0.42.0",
-    "oxlint": "^1.57.0",
+    "oxfmt": "^0.44.0",
+    "oxlint": "^1.59.0",
     "typescript": "^6.0.2"
   },
   "devEngines": {

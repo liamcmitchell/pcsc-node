@@ -43,7 +43,7 @@ async function main() {
     for (const reader of readers.values()) {
       if (reader.name.toLowerCase().includes("windows hello")) {
         console.log(`${reader.name}: skipping`);
-        continue
+        continue;
       }
 
       if (!reader.connected) {
