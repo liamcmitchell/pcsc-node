@@ -3,6 +3,12 @@
 #include <napi.h>
 #include "platform/pcsc.h"
 
+// SCARD_E_UNSUPPORTED_FEATURE (0x80100022) is present in winscard.h and
+// pcsc-lite but is not universally guaranteed across all SDK versions.
+#ifndef SCARD_E_UNSUPPORTED_FEATURE
+#define SCARD_E_UNSUPPORTED_FEATURE 0x80100022L
+#endif
+
 // Convert PC/SC error codes to human-readable strings
 // Using explicit casts to handle unsigned->signed on macOS
 inline const char* GetPCSCErrorString(LONG code) {
@@ -41,10 +47,25 @@ inline const char* GetPCSCErrorString(LONG code) {
     if (ucode == SCARD_W_UNRESPONSIVE_CARD) return "Card is unresponsive";
     if (ucode == SCARD_W_UNSUPPORTED_CARD) return "Card is not supported";
 
+    if (ucode == static_cast<DWORD>(SCARD_E_UNSUPPORTED_FEATURE)) return "Unsupported feature";
+
+    // Win32 system error codes are returned by SCardControl on Windows when a
+    // control code is not recognised by the device driver.  They occupy values
+    // below 0x80000000, clearly distinct from SCARD_* codes (0x80100000+).
+    if (ucode < 0x80000000u) {
+        switch (ucode) {
+            case 1:   return "Command not recognised by device";
+            case 5:   return "Access denied";
+            case 50:  return "Operation not supported";
+            case 87:  return "Invalid parameter";
+            case 122: return "Insufficient buffer";
+        }
+        return "System error";
+    }
+
     return "Unknown PC/SC error";
 }
 
-// Get the error code value
 inline LONG GetPCSCErrorCode(LONG code) {
     return code;
 }

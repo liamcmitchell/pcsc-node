@@ -142,20 +142,8 @@ Napi::Value PCSCContext::GetIsValid(const Napi::CallbackInfo& info) {
 void PCSCContext::MonitorLoop() {
     std::vector<SCARD_READERSTATE> states;
     std::vector<std::string> readerNames;
-    DWORD pnpCurrentState = SCARD_STATE_UNAWARE;
     bool checkReaders = true;
     bool readyEmitted = false;
-
-    // Detect PnP support.
-    bool pnpSupported = false;
-    SCARD_READERSTATE pnp_state = {};
-    pnp_state.szReader = "\\\\?PnP?\\Notification";
-    pnp_state.dwCurrentState = SCARD_STATE_UNAWARE;
-    LONG pnp_result = SCardGetStatusChange(context_, 0, &pnp_state, 1);
-    if ((pnp_result == SCARD_S_SUCCESS || pnp_result == static_cast<LONG>(SCARD_E_TIMEOUT)) &&
-        !(pnp_state.dwEventState & SCARD_STATE_UNKNOWN)) {
-        pnpSupported = true;
-    }
 
     while (monitoring_) {
         if (checkReaders) {
@@ -222,17 +210,8 @@ void PCSCContext::MonitorLoop() {
             states.push_back(state);
         }
 
-        if (pnpSupported) {
-            readerNames.push_back("\\\\?PnP?\\Notification");
-            SCARD_READERSTATE pnpState = {};
-            pnpState.szReader = readerNames.back().c_str();
-            pnpState.dwCurrentState = pnpCurrentState;
-            pnpState.pvUserData = nullptr;
-            states.push_back(pnpState);
-        }
-
-        // No readers and no PnP support: just poll reader list at 1s cadence.
-        if (states.empty() && !pnpSupported) {
+        // No readers: just poll at 1s cadence.
+        if (states.empty()) {
             if (!readyEmitted) {
                 EmitEvent("ready", "", 0, {});
                 readyEmitted = true;
@@ -242,8 +221,7 @@ void PCSCContext::MonitorLoop() {
             continue;
         }
 
-        DWORD timeoutMs = pnpSupported ? INFINITE : 1000;
-        LONG result = SCardGetStatusChange(context_, timeoutMs, states.data(), states.size());
+        LONG result = SCardGetStatusChange(context_, 1000, states.data(), states.size());
 
         if (!monitoring_) {
             break;
@@ -253,7 +231,7 @@ void PCSCContext::MonitorLoop() {
             break;
         }
 
-        if (result == static_cast<LONG>(SCARD_E_TIMEOUT) && !pnpSupported) {
+        if (result == static_cast<LONG>(SCARD_E_TIMEOUT)) {
             checkReaders = true;
             continue;
         }
@@ -276,12 +254,6 @@ void PCSCContext::MonitorLoop() {
             }
 
             const std::string& readerName = readerNames[i];
-
-            if (pnpSupported && readerName == "\\\\?PnP?\\Notification") {
-                pnpCurrentState = states[i].dwEventState;
-                checkReaders = true;
-                continue;
-            }
 
             LogPcscState(readerName, states[i].dwEventState);
             auto* info = static_cast<ReaderInfo*>(states[i].pvUserData);

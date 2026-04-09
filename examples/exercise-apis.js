@@ -15,6 +15,11 @@ function formatHex(buffer) {
   return buffer.toString("hex").toUpperCase();
 }
 
+function formatError(error) {
+  const code = typeof error?.code === "number" ? ` (code=${toHex(error.code)})` : "";
+  return `${error.message}${code}`;
+}
+
 async function safeTransmit(reader, name, command) {
   try {
     const response = await reader.transmit(command);
@@ -33,7 +38,7 @@ async function main() {
 
   const ctx = new Context();
 
-  ctx.on("error", (error) => console.log(`[error] ${error.message}`));
+  ctx.on("error", (error) => console.log(`[error] ${formatError(error)}`));
 
   try {
     const readers = await ctx.getReaders();
@@ -81,27 +86,33 @@ async function main() {
       try {
         await reader.control("not-a-number", Buffer.alloc(0));
       } catch (error) {
-        console.log(`  INTENTIONAL JS EXCEPTION (invalid control arg): ${error.message}`);
+        console.log(`  intentional JS exception (invalid control arg): ${formatError(error)}`);
       }
 
       try {
         await reader.control(0, Buffer.alloc(0));
       } catch (error) {
-        const code = typeof error?.code === "number" ? toHex(error.code) : "<none>";
-        console.log(`  INTENTIONAL PCSC ERROR (control code=0): ${error.message} (code=${code})`);
+        console.log(`  intentional PCSC error (control code=0): ${formatError(error)}`);
+      }
+
+      try {
+        await reader.reconnect(ShareMode.DIRECT, Protocol.UNDEFINED, Disposition.LEAVE);
+        console.log("  reconnect(direct/no-reset): ok");
+      } catch (error) {
+        console.log(`  reconnect(direct/no-reset): ${formatError(error)}`);
       }
 
       try {
         const response = await reader.control(ControlCode.GET_FEATURE_REQUEST, Buffer.alloc(0));
         const features = parseFeaturesDetails(response);
         console.log(
-          `  GET_FEATURE_REQUEST (${toHex(ControlCode.GET_FEATURE_REQUEST)}): ${features.length} features`,
+          `  get feature request (${toHex(ControlCode.GET_FEATURE_REQUEST)}): ${features.length} features`,
         );
         for (const feature of features) {
           console.log(`    ${feature.name}: ${toHex(feature.controlCode)}`);
         }
       } catch (error) {
-        console.log(`  GET_FEATURE_REQUEST: ${error.message}`);
+        console.log(`  get feature request: ${formatError(error)}`);
       }
 
       let exclusiveReady = false;
@@ -115,7 +126,7 @@ async function main() {
       }
 
       if (!exclusiveReady) {
-        console.log(`  reconnect(exclusive/no-reset): ${lastError?.message ?? "failed"}`);
+        console.log(`  reconnect(exclusive/no-reset): ${formatError(lastError)}`);
         console.log("  skipping reset tests: could not acquire exclusive access");
       }
 
@@ -124,7 +135,7 @@ async function main() {
           await reader.reconnect(ShareMode.EXCLUSIVE, Protocol.T0 | Protocol.T1, Disposition.RESET);
           console.log("  reconnect(reset): ok");
         } catch (error) {
-          console.log(`  reconnect(reset): ${error.message}`);
+          console.log(`  reconnect(reset): ${formatError(error)}`);
         }
 
         try {
@@ -135,7 +146,7 @@ async function main() {
           );
           console.log("  reconnect(unpower): ok");
         } catch (error) {
-          console.log(`  reconnect(unpower): ${error.message}`);
+          console.log(`  reconnect(unpower): ${formatError(error)}`);
         }
       }
 
