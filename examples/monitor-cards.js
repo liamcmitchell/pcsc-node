@@ -8,7 +8,7 @@ console.log("Monitoring for card events. Press Ctrl+C to stop.\n");
 const context = new Context()
   .on("reader", (reader) => {
     reader.on("insert", async () => {
-      console.log(`\n[*] Card inserted in: ${reader.name}`);
+      console.log(`[*] Card inserted in: ${reader.name}`);
 
       // Get ATR
       if (reader.atr) {
@@ -25,12 +25,10 @@ const context = new Context()
       } catch {
         // UID read not supported, that's OK
       }
-
-      console.log();
     });
 
     reader.on("remove", () => {
-      console.log(`[*] Card removed from: ${reader.name}\n`);
+      console.log(`[*] Card removed from: ${reader.name}`);
     });
   })
   .on("attach", (reader) => {
@@ -55,7 +53,7 @@ const context = new Context()
 
 // Handle shutdown
 process.on("SIGINT", () => {
-  console.log("\nStopping...");
+  console.log("Stopping...");
   context.close();
   process.exit(0);
 });

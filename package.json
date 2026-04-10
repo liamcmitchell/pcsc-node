@@ -55,7 +55,8 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt --write",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "fmt:cpp": "clang-format -i -style=file src/addon.cpp src/pcsc_context.cpp src/pcsc_context.h src/pcsc_debug.h src/pcsc_errors.h src/pcsc_reader.cpp src/pcsc_reader.h"
   },
   "dependencies": {
     "node-addon-api": "^8.7.0"
@@ -63,6 +64,7 @@
   "devDependencies": {
     "@types/node": "^25.5.2",
     "c8": "^11.0.0",
+    "clang-format-node": "^3.0.1",
     "node-gyp": "^12.2.0",
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0",

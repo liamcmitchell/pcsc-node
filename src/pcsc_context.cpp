@@ -1,335 +1,332 @@
 #include "pcsc_context.h"
-#include "pcsc_reader.h"
-#include "pcsc_errors.h"
 #include "pcsc_debug.h"
+#include "pcsc_errors.h"
+#include "pcsc_reader.h"
 #include <cstring>
 #include <memory>
 
 Napi::FunctionReference PCSCContext::constructor;
 
-
-
 // Event data passed from worker thread to JS thread
 struct EventData {
-    std::string eventType;
-    std::string readerName;
-    DWORD state;
-    DWORD code;
-    std::vector<uint8_t> atr;
+  std::string eventType;
+  std::string readerName;
+  DWORD state;
+  DWORD code;
+  std::vector<uint8_t> atr;
 };
 
-
 Napi::Object PCSCContext::Init(Napi::Env env, Napi::Object exports) {
-    Napi::Function func = DefineClass(env, "PCSCContext", {
-        InstanceMethod("startMonitor", &PCSCContext::StartMonitor),
-        InstanceMethod("stopMonitor", &PCSCContext::StopMonitor),
-        InstanceMethod("close", &PCSCContext::Close),
-        InstanceAccessor("isValid", &PCSCContext::GetIsValid, nullptr),
-    });
+  Napi::Function func = DefineClass(
+      env, "PCSCContext",
+      {
+          InstanceMethod("startMonitor", &PCSCContext::StartMonitor),
+          InstanceMethod("stopMonitor", &PCSCContext::StopMonitor),
+          InstanceMethod("close", &PCSCContext::Close),
+          InstanceAccessor("isValid", &PCSCContext::GetIsValid, nullptr),
+      });
 
-    constructor = Napi::Persistent(func);
-    constructor.SuppressDestruct();
+  constructor = Napi::Persistent(func);
+  constructor.SuppressDestruct();
 
-    exports.Set("PCSCContext", func);
-    return exports;
+  exports.Set("PCSCContext", func);
+  return exports;
 }
 
-PCSCContext::PCSCContext(const Napi::CallbackInfo& info)
-    : Napi::ObjectWrap<PCSCContext>(info), context_(0), valid_(false), monitoring_(false) {
+PCSCContext::PCSCContext(const Napi::CallbackInfo &info)
+    : Napi::ObjectWrap<PCSCContext>(info), closed_(false), cancelContext_(0),
+      monitoring_(false) {}
 
-    Napi::Env env = info.Env();
+PCSCContext::~PCSCContext() { StopMonitorInternal(); }
 
-    LONG result = SCardEstablishContext(SCARD_SCOPE_SYSTEM, nullptr, nullptr, &context_);
+Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
 
-    if (result != SCARD_S_SUCCESS) {
-        ThrowPCSCError(env, result);
-        return;
-    }
-
-    valid_ = true;
-}
-
-PCSCContext::~PCSCContext() {
-    StopMonitorInternal();
-
-    if (valid_ && context_ != 0) {
-        SCardReleaseContext(context_);
-        valid_ = false;
-        context_ = 0;
-    }
-}
-
-Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    if (monitoring_) {
-        Napi::Error::New(env, "Monitor is already running").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    if (!valid_) {
-        Napi::Error::New(env, "Context is not valid").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    if (info.Length() < 1 || !info[0].IsFunction()) {
-        Napi::TypeError::New(env, "Callback function required").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    Napi::Function callback = info[0].As<Napi::Function>();
-
-    tsfn_ = Napi::ThreadSafeFunction::New(
-        env,
-        callback,
-        "PCSCMonitor",
-        0,    // Unlimited queue size
-        1,    // 1 initial thread
-        [this](Napi::Env) {
-            monitoring_ = false;
-        }
-    );
-
-    monitoring_ = true;
-    monitorThread_ = std::thread(&PCSCContext::MonitorLoop, this);
-
+  if (monitoring_) {
+    Napi::Error::New(env, "Monitor is already running")
+        .ThrowAsJavaScriptException();
     return env.Undefined();
+  }
+
+  if (closed_) {
+    Napi::Error::New(env, "Context is closed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Callback function required")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  Napi::Function callback = info[0].As<Napi::Function>();
+
+  tsfn_ =
+      Napi::ThreadSafeFunction::New(env, callback, "PCSCMonitor",
+                                    0, // Unlimited queue size
+                                    1, // 1 initial thread
+                                    [this](Napi::Env) { monitoring_ = false; });
+
+  monitoring_ = true;
+  monitorThread_ = std::thread(&PCSCContext::MonitorLoop, this);
+
+  return env.Undefined();
 }
 
-Napi::Value PCSCContext::StopMonitor(const Napi::CallbackInfo& info) {
-    StopMonitorInternal();
-    return info.Env().Undefined();
+Napi::Value PCSCContext::StopMonitor(const Napi::CallbackInfo &info) {
+  StopMonitorInternal();
+  return info.Env().Undefined();
 }
 
 void PCSCContext::StopMonitorInternal() {
-    if (!monitoring_) {
-        return;
-    }
+  if (!monitoring_) {
+    return;
+  }
 
-    monitoring_ = false;
+  monitoring_ = false;
 
-    // Cancel any blocking SCardGetStatusChange call
-    if (valid_) {
-        SCardCancel(context_);
-    }
+  // Wake any interruptible sleep in the monitor loop.
+  sleepCv_.notify_all();
 
-    if (monitorThread_.joinable()) {
-        monitorThread_.join();
-    }
+  // Cancel any blocking SCardGetStatusChange call
+  SCARDCONTEXT cancelContext = cancelContext_.load();
+  if (cancelContext != 0) {
+    SCardCancel(cancelContext);
+  }
 
-    tsfn_.Release();
-    readerStates_.clear();
+  if (monitorThread_.joinable()) {
+    monitorThread_.join();
+  }
+
+  tsfn_.Release();
+  readerStates_.clear();
 }
 
-Napi::Value PCSCContext::Close(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    StopMonitorInternal();
-
-    if (valid_ && context_ != 0) {
-        SCardReleaseContext(context_);
-        valid_ = false;
-        context_ = 0;
-    }
-
-    return env.Undefined();
+Napi::Value PCSCContext::Close(const Napi::CallbackInfo &info) {
+  StopMonitorInternal();
+  closed_ = true;
+  return info.Env().Undefined();
 }
 
-Napi::Value PCSCContext::GetIsValid(const Napi::CallbackInfo& info) {
-    return Napi::Boolean::New(info.Env(), valid_);
+Napi::Value PCSCContext::GetIsValid(const Napi::CallbackInfo &info) {
+  return Napi::Boolean::New(info.Env(), !closed_);
 }
 
+// Outer loop: establish context, run inner loop, release context.
 void PCSCContext::MonitorLoop() {
-    std::vector<SCARD_READERSTATE> states;
-    std::vector<std::string> readerNames;
-    bool checkReaders = true;
-    bool readyEmitted = false;
+  bool readyEmitted = false;
 
-    while (monitoring_) {
-        if (checkReaders) {
-            std::vector<std::string> detachedNames;
+  while (monitoring_) {
+    SCARDCONTEXT ctx = 0;
+    LONG result =
+        SCardEstablishContext(SCARD_SCOPE_SYSTEM, nullptr, nullptr, &ctx);
 
-            for (auto& pair : readerStates_) {
-                pair.second.seenInScan = false;
-            }
-
-            DWORD readersLen = 0;
-            LONG listResult = SCardListReaders(context_, nullptr, nullptr, &readersLen);
-
-            if (listResult == static_cast<LONG>(SCARD_E_NO_READERS_AVAILABLE) || readersLen == 0) {
-                for (const auto& pair : readerStates_) {
-                    detachedNames.push_back(pair.first);
-                }
-                readerStates_.clear();
-            } else if (listResult == SCARD_S_SUCCESS) {
-                std::vector<char> buffer(readersLen);
-                listResult = SCardListReaders(context_, nullptr, buffer.data(), &readersLen);
-
-                if (listResult == SCARD_S_SUCCESS) {
-                    const char* p = buffer.data();
-                    while (*p != '\0') {
-                        std::string name(p);
-                        auto [it, inserted] = readerStates_.try_emplace(name, ReaderInfo{});
-                        if (inserted) {
-                            it->second.lastState = SCARD_STATE_UNAWARE;
-                            it->second.atr.clear();
-                            it->second.announced = false;
-                        }
-                        it->second.seenInScan = true;
-                        p += strlen(p) + 1;
-                    }
-
-                    for (auto it = readerStates_.begin(); it != readerStates_.end();) {
-                        if (!it->second.seenInScan) {
-                            detachedNames.push_back(it->first);
-                            it = readerStates_.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-                }
-            }
-
-            for (const auto& name : detachedNames) {
-                EmitEvent("detached", name, 0, {});
-            }
-
-            checkReaders = false;
-        }
-
-        // Build states array using reader names from our map
-        states.clear();
-        readerNames.clear();
-
-        for (const auto& pair : readerStates_) {
-            SCARD_READERSTATE state = {};
-            readerNames.push_back(pair.first);
-            state.szReader = readerNames.back().c_str();
-            state.dwCurrentState = pair.second.lastState;
-            state.pvUserData = const_cast<ReaderInfo*>(&pair.second);
-            states.push_back(state);
-        }
-
-        // No readers: just poll at 1s cadence.
-        if (states.empty()) {
-            if (!readyEmitted) {
-                EmitEvent("ready", "", 0, {});
-                readyEmitted = true;
-            }
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            checkReaders = true;
-            continue;
-        }
-
-        LONG result = SCardGetStatusChange(context_, 1000, states.data(), states.size());
-
-        if (!monitoring_) {
-            break;
-        }
-
-        if (result == static_cast<LONG>(SCARD_E_CANCELLED)) {
-            break;
-        }
-
-        if (result == static_cast<LONG>(SCARD_E_TIMEOUT)) {
-            checkReaders = true;
-            continue;
-        }
-
-        if (result != SCARD_S_SUCCESS) {
-            EmitEvent(
-                "error",
-                GetPCSCErrorString(result),
-                0,
-                {},
-                static_cast<DWORD>(GetPCSCErrorCode(result))
-            );
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            continue;
-        }
-
-        for (size_t i = 0; i < states.size(); i++) {
-            if (!(states[i].dwEventState & SCARD_STATE_CHANGED)) {
-                continue;
-            }
-
-            const std::string& readerName = readerNames[i];
-
-            LogPcscState(readerName, states[i].dwEventState);
-            auto* info = static_cast<ReaderInfo*>(states[i].pvUserData);
-            if (info == nullptr) {
-                continue;
-            }
-
-            DWORD newState = states[i].dwEventState & ~SCARD_STATE_CHANGED;
-
-            std::vector<uint8_t> atr;
-            if (states[i].cbAtr > 0) {
-                atr.assign(states[i].rgbAtr, states[i].rgbAtr + states[i].cbAtr);
-            }
-
-            const DWORD prevState = info->lastState;
-            info->lastState = newState;
-            info->atr = atr;
-
-            const bool wasUnresolved =
-                prevState == SCARD_STATE_UNAWARE || (prevState & SCARD_STATE_UNKNOWN) != 0;
-            const bool isResolved =
-                newState != SCARD_STATE_UNAWARE && (newState & SCARD_STATE_UNKNOWN) == 0;
-
-            if (!info->announced && wasUnresolved && isResolved) {
-                info->announced = true;
-                EmitEvent("attached", readerName, newState, atr);
-            } else if (info->announced && newState != prevState) {
-                EmitEvent("changed", readerName, newState, atr);
-            }
-        }
-
-        if (!readyEmitted) {
-            // Ready means initial monitor state is stable enough for consumers:
-            // all currently tracked readers have resolved beyond UNKNOWN.
-            bool hasUnknown = false;
-            for (const auto& pair : readerStates_) {
-                if ((pair.second.lastState & SCARD_STATE_UNKNOWN) != 0) {
-                    hasUnknown = true;
-                    break;
-                }
-            }
-
-            if (!hasUnknown) {
-                EmitEvent("ready", "", 0, {});
-                readyEmitted = true;
-            }
-        }
+    if (result == SCARD_S_SUCCESS) {
+      cancelContext_.store(ctx);
+      result = MonitorReadersLoop(ctx, readyEmitted);
     }
+
+    if (ctx != 0) {
+      cancelContext_.store(0);
+      SCardReleaseContext(ctx);
+    }
+
+    if (!monitoring_) {
+      break;
+    } else if (result == static_cast<LONG>(SCARD_E_NO_SERVICE) ||
+               result == static_cast<LONG>(SCARD_E_SERVICE_STOPPED)) {
+      // If we lost service, log and wait before retrying.
+      LogPcscDebug(GetPCSCErrorString(result), result);
+      std::unique_lock<std::mutex> lock(sleepMutex_);
+      sleepCv_.wait_for(lock, std::chrono::milliseconds(1000),
+                        [this]() { return !monitoring_; });
+      continue;
+    } else if (result != SCARD_S_SUCCESS) {
+      // Any other error should be emitted and stop monitor.
+      EmitEvent("error", GetPCSCErrorString(result), 0, {},
+                static_cast<DWORD>(GetPCSCErrorCode(result)));
+      break;
+    }
+  }
+
+  for (const auto &pair : readerStates_) {
+    if (pair.second.announced)
+      EmitEvent("detached", pair.first, 0, {});
+  }
+
+  readerStates_.clear();
 }
 
-void PCSCContext::EmitEvent(const std::string& eventType, const std::string& readerName,
-                             DWORD state, const std::vector<uint8_t>& atr, DWORD code) {
-    LogPcscEvent(eventType, readerName);
-    auto data = std::make_shared<EventData>(EventData{eventType, readerName, state, code, atr});
+// Inner loop: list readers, get reader status changes.
+LONG PCSCContext::MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted) {
+  LONG result = SCARD_S_SUCCESS;
 
-    auto status = tsfn_.NonBlockingCall([data](Napi::Env env, Napi::Function callback) {
-        auto ptr = data.get();
+  while (monitoring_) {
+    // Mark all readers unseen.
+    for (auto &pair : readerStates_)
+      pair.second.seenInScan = false;
 
-        Napi::Object event = Napi::Object::New(env);
-        event.Set("type", Napi::String::New(env, ptr->eventType));
-        event.Set("name", Napi::String::New(env, ptr->readerName));
-        event.Set("state", Napi::Number::New(env, ptr->state));
-        event.Set("code", Napi::Number::New(env, ptr->code));
+    // Get number of readers.
+    DWORD readersLen = 0;
+    result = SCardListReaders(ctx, nullptr, nullptr, &readersLen);
 
-        if (!ptr->atr.empty()) {
-            event.Set("atr", Napi::Buffer<uint8_t>::Copy(env, ptr->atr.data(), ptr->atr.size()));
-        } else {
-            event.Set("atr", env.Null());
+    // No readers is not an error.
+    if (result == static_cast<LONG>(SCARD_E_NO_READERS_AVAILABLE)) {
+      result = SCARD_S_SUCCESS;
+      readersLen = 0;
+    }
+
+    // Get reader names.
+    if (result == SCARD_S_SUCCESS && readersLen > 0) {
+      std::vector<char> buffer(readersLen);
+      result = SCardListReaders(ctx, nullptr, buffer.data(), &readersLen);
+      if (result == SCARD_S_SUCCESS) {
+        const char *p = buffer.data();
+        while (*p != '\0') {
+          std::string name(p);
+          auto [it, inserted] = readerStates_.try_emplace(name, ReaderInfo{});
+          if (inserted) {
+            it->second.lastState = SCARD_STATE_UNAWARE;
+            it->second.atr.clear();
+            it->second.announced = false;
+          }
+          // Mark seen.
+          it->second.seenInScan = true;
+          p += strlen(p) + 1;
         }
+      }
+    }
 
-        if (ptr->eventType == "attached") {
-            event.Set("nativeReader", PCSCReader::NewInstance(env, ptr->readerName));
+    // Clean readers that have not been seen.
+    for (auto it = readerStates_.begin(); it != readerStates_.end();) {
+      if (!it->second.seenInScan) {
+        if (it->second.announced)
+          EmitEvent("detached", it->first, 0, {});
+        it = readerStates_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    if (result != SCARD_S_SUCCESS)
+      return result;
+
+    // We have readers, get status changes.
+    if (!readerStates_.empty()) {
+      const size_t readerCount = readerStates_.size();
+      std::vector<SCARD_READERSTATE> states(readerCount);
+
+      size_t i = 0;
+      for (auto &pair : readerStates_) {
+        SCARD_READERSTATE state = {};
+        state.szReader = pair.first.c_str();
+        state.dwCurrentState = pair.second.lastState;
+        state.pvUserData = &pair.second;
+        states[i] = state;
+
+        i++;
+      }
+
+      result = SCardGetStatusChange(ctx, 1000, states.data(),
+                                    static_cast<DWORD>(states.size()));
+
+      // Timeout waiting for changes == no changes, repeat.
+      if (result == static_cast<LONG>(SCARD_E_TIMEOUT))
+        continue;
+
+      if (result != SCARD_S_SUCCESS)
+        return result;
+
+      for (size_t i = 0; i < states.size(); i++) {
+        if (!(states[i].dwEventState & SCARD_STATE_CHANGED))
+          continue;
+
+        const std::string readerName =
+            states[i].szReader ? states[i].szReader : "";
+        LogPcscState(readerName, states[i].dwEventState);
+        auto *info = static_cast<ReaderInfo *>(states[i].pvUserData);
+        if (!info)
+          continue;
+
+        DWORD newState = states[i].dwEventState & ~SCARD_STATE_CHANGED;
+        std::vector<uint8_t> atr;
+        if (states[i].cbAtr > 0)
+          atr.assign(states[i].rgbAtr, states[i].rgbAtr + states[i].cbAtr);
+
+        const DWORD prevState = info->lastState;
+        info->lastState = newState;
+        info->atr = atr;
+
+        const bool wasUnresolved = prevState == SCARD_STATE_UNAWARE ||
+                                   (prevState & SCARD_STATE_UNKNOWN) != 0;
+        const bool isResolved = newState != SCARD_STATE_UNAWARE &&
+                                (newState & SCARD_STATE_UNKNOWN) == 0;
+
+        if (!info->announced && wasUnresolved && isResolved) {
+          info->announced = true;
+          EmitEvent("attached", readerName, newState, atr);
+        } else if (info->announced && newState != prevState) {
+          EmitEvent("changed", readerName, newState, atr);
         }
+      }
+    }
 
-        callback.Call({event});
-    });
+    if (!readyEmitted) {
+      bool hasUnknown = false;
+      for (const auto &pair : readerStates_) {
+        if ((pair.second.lastState & SCARD_STATE_UNKNOWN) != 0) {
+          hasUnknown = true;
+          break;
+        }
+      }
+      if (!hasUnknown) {
+        EmitEvent("ready", "", 0, {});
+        readyEmitted = true;
+      }
+    }
 
-    (void)status;
+    if (readerStates_.empty()) {
+      // We didn't wait for changes in SCardGetStatusChange so wait here.
+      std::unique_lock<std::mutex> lock(sleepMutex_);
+      sleepCv_.wait_for(lock, std::chrono::milliseconds(1000),
+                        [this]() { return !monitoring_; });
+      continue;
+    }
+  }
+
+  return result;
+}
+
+void PCSCContext::EmitEvent(const std::string &eventType,
+                            const std::string &readerName, DWORD state,
+                            const std::vector<uint8_t> &atr, DWORD code) {
+  LogPcscEvent(eventType, readerName);
+  auto data = std::make_shared<EventData>(
+      EventData{eventType, readerName, state, code, atr});
+
+  auto status = tsfn_.NonBlockingCall([data](Napi::Env env,
+                                             Napi::Function callback) {
+    auto ptr = data.get();
+
+    Napi::Object event = Napi::Object::New(env);
+    event.Set("type", Napi::String::New(env, ptr->eventType));
+    event.Set("name", Napi::String::New(env, ptr->readerName));
+    event.Set("state", Napi::Number::New(env, ptr->state));
+    event.Set("code", Napi::Number::New(env, ptr->code));
+
+    if (!ptr->atr.empty()) {
+      event.Set("atr", Napi::Buffer<uint8_t>::Copy(env, ptr->atr.data(),
+                                                   ptr->atr.size()));
+    } else {
+      event.Set("atr", env.Null());
+    }
+
+    if (ptr->eventType == "attached") {
+      event.Set("nativeReader", PCSCReader::NewInstance(env, ptr->readerName));
+    }
+
+    callback.Call({event});
+  });
+
+  (void)status;
 }
