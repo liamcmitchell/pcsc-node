@@ -128,8 +128,15 @@ void PCSCContext::MonitorLoop() {
     }
 
     if (ctx != 0) {
+      // If we had context, release and detach/clear any readers.
       cancelContext_.store(0);
       SCardReleaseContext(ctx);
+      for (const auto &pair : readerStates_) {
+        if (pair.second.announced) {
+          EmitEvent("detached", pair.first, 0, {});
+        }
+      }
+      readerStates_.clear();
     }
 
     if (!monitoring_) {
@@ -157,13 +164,6 @@ void PCSCContext::MonitorLoop() {
       continue;
     }
   }
-
-  for (const auto &pair : readerStates_) {
-    if (pair.second.announced)
-      EmitEvent("detached", pair.first, 0, {});
-  }
-
-  readerStates_.clear();
 }
 
 // Inner loop: list readers, get reader status changes.
