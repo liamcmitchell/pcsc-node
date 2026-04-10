@@ -134,9 +134,14 @@ void PCSCContext::MonitorLoop() {
 
     if (!monitoring_) {
       break;
-    } else if (result == static_cast<LONG>(SCARD_E_NO_SERVICE) ||
-               result == static_cast<LONG>(SCARD_E_SERVICE_STOPPED)) {
-      // We lost service. Log, emit unready and wait before retrying.
+    } else if (result == static_cast<LONG>(SCARD_E_INVALID_PARAMETER)) {
+      // Fatal error: likely a bug in our code. Stop monitor.
+      EmitEvent("error", GetPCSCErrorString(result), 0, {},
+                static_cast<DWORD>(GetPCSCErrorCode(result)));
+      break;
+    } else if (result != SCARD_S_SUCCESS) {
+      // Any other error is retryable: service unavailability, comm errors, etc.
+      // Emit unready once, then retry after delay.
       LogPcscDebug(GetPCSCErrorString(result), result);
 
       if (!unreadyEmitted) {
@@ -150,11 +155,6 @@ void PCSCContext::MonitorLoop() {
       sleepCv_.wait_for(lock, std::chrono::milliseconds(1000),
                         [this]() { return !monitoring_; });
       continue;
-    } else if (result != SCARD_S_SUCCESS) {
-      // Any other error should be emitted and stop monitor.
-      EmitEvent("error", GetPCSCErrorString(result), 0, {},
-                static_cast<DWORD>(GetPCSCErrorCode(result)));
-      break;
     }
   }
 
