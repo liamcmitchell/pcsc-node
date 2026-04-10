@@ -115,6 +115,7 @@ Napi::Value PCSCContext::GetIsValid(const Napi::CallbackInfo &info) {
 // Outer loop: establish context, run inner loop, release context.
 void PCSCContext::MonitorLoop() {
   bool readyEmitted = false;
+  bool unreadyEmitted = false;
 
   while (monitoring_) {
     SCARDCONTEXT ctx = 0;
@@ -123,7 +124,7 @@ void PCSCContext::MonitorLoop() {
 
     if (result == SCARD_S_SUCCESS) {
       cancelContext_.store(ctx);
-      result = MonitorReadersLoop(ctx, readyEmitted);
+      result = MonitorReadersLoop(ctx, readyEmitted, unreadyEmitted);
     }
 
     if (ctx != 0) {
@@ -135,8 +136,16 @@ void PCSCContext::MonitorLoop() {
       break;
     } else if (result == static_cast<LONG>(SCARD_E_NO_SERVICE) ||
                result == static_cast<LONG>(SCARD_E_SERVICE_STOPPED)) {
-      // If we lost service, log and wait before retrying.
+      // We lost service. Log, emit unready and wait before retrying.
       LogPcscDebug(GetPCSCErrorString(result), result);
+
+      if (!unreadyEmitted) {
+        EmitEvent("unready", GetPCSCErrorString(result), 0, {},
+                  static_cast<DWORD>(GetPCSCErrorCode(result)));
+        unreadyEmitted = true;
+      }
+      readyEmitted = false;
+
       std::unique_lock<std::mutex> lock(sleepMutex_);
       sleepCv_.wait_for(lock, std::chrono::milliseconds(1000),
                         [this]() { return !monitoring_; });
@@ -158,7 +167,8 @@ void PCSCContext::MonitorLoop() {
 }
 
 // Inner loop: list readers, get reader status changes.
-LONG PCSCContext::MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted) {
+LONG PCSCContext::MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted,
+                                     bool &unreadyEmitted) {
   LONG result = SCARD_S_SUCCESS;
 
   while (monitoring_) {
@@ -282,6 +292,7 @@ LONG PCSCContext::MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted) {
       if (!hasUnknown) {
         EmitEvent("ready", "", 0, {});
         readyEmitted = true;
+        unreadyEmitted = false;
       }
     }
 

@@ -247,6 +247,22 @@ function createMockNative() {
     },
 
     /**
+     * Emit an unready monitor event with optional PC/SC code.
+     * @param {string} message
+     * @param {number} [code]
+     */
+    emitUnready(message, code) {
+      emit({ type: "unready", name: message, state: 0, atr: null, code });
+    },
+
+    /**
+     * Emit a ready monitor event.
+     */
+    emitReady() {
+      emit({ type: "ready", name: "", state: 0, atr: null });
+    },
+
+    /**
      * Emit a 'changed' event for any reader name (even one not in the registry).
      * @param {string} name
      * @param {number} state

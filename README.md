@@ -69,6 +69,9 @@ ctx
   .on("remove", (reader) => {
     console.log("Card removed from", reader.name);
   })
+  .on("unready", (error) => {
+    console.error("Unavailable:", error.message);
+  })
   .on("error", (error) => {
     console.error("Error:", error.message);
   })
@@ -91,7 +94,9 @@ class Context extends EventEmitter {
   // Start monitoring.
   start(): this;
   // Starts monitoring if needed and resolves after initial reader discovery has completed.
-  getReaders(): Promise<ReadonlyMap<string, Reader>>;
+  getReaders(options?: {
+    timeoutMs?: number; // 5000ms by default, set to 0 to disable timeout.
+  }): Promise<ReadonlyMap<string, Reader>>;
   // Stop monitoring.
   close(): void;
 }
@@ -99,16 +104,17 @@ class Context extends EventEmitter {
 
 Context events:
 
-| Event    | Args                  | Description                                                                                                                   |
-| -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `reader` | `(reader)`            | Fired once when a new `Reader` instance is created for a reader name. This fires before the first `attach` for that instance. |
-| `attach` | `(reader)`            | Fired when a reader becomes available. Can fire multiple times for the same `Reader` instance after detach/reattach.          |
-| `detach` | `(reader)`            | Fired when a reader is removed/unavailable.                                                                                   |
-| `change` | `(reader, prevState)` | Fired when PC/SC state flags change for a currently attached reader.                                                          |
-| `insert` | `(reader)`            | Fired when a card becomes present. If `autoConnect` is enabled, connection is established before this event.                  |
-| `remove` | `(reader)`            | Fired when a card is removed or when a connected reader is detached.                                                          |
-| `error`  | `(error)`             | Fired for monitor errors or propagated reader operation errors without a reader-level error listener.                         |
-| `ready`  | `()`                  | Fired after initial startup events are processed (same lifecycle point as `await ctx.getReaders()`).                          |
+| Event     | Args                  | Description                                                                                                                    |
+| --------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `reader`  | `(reader)`            | Fired once when a new `Reader` instance is created for a reader name. This fires before the first `attach` for that instance.  |
+| `attach`  | `(reader)`            | Fired when a reader becomes available. Can fire multiple times for the same `Reader` instance after detach/reattach.           |
+| `detach`  | `(reader)`            | Fired when a reader is removed/unavailable.                                                                                    |
+| `change`  | `(reader, prevState)` | Fired when PC/SC state flags change for a currently attached reader.                                                           |
+| `insert`  | `(reader)`            | Fired when a card becomes present. If `autoConnect` is enabled, connection is established before this event.                   |
+| `remove`  | `(reader)`            | Fired when a card is removed or when a connected reader is detached.                                                           |
+| `error`   | `(error)`             | Fired for monitor errors or propagated reader operation errors without a reader-level error listener.                          |
+| `ready`   | `()`                  | Fired after initial startup events are processed (same lifecycle point as `await ctx.getReaders()`).                           |
+| `unready` | `(error)`             | Fired when the monitor loses readiness, for example because the PC/SC service is unavailable. Error includes message and code. |
 
 ## Reader
 

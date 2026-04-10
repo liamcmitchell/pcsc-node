@@ -12,7 +12,17 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function startContext(options = {}) {
   const ctx = new Context(options);
-  for (const eventName of ["reader", "attach", "detach", "change", "insert", "remove", "error"]) {
+  for (const eventName of [
+    "reader",
+    "attach",
+    "detach",
+    "change",
+    "insert",
+    "remove",
+    "error",
+    "ready",
+    "unready",
+  ]) {
     const listener = options[eventName];
     if (listener) {
       ctx.on(eventName, listener);
@@ -309,6 +319,96 @@ describe("Context Integration", () => {
     assert.strictEqual(readers.get("ACR122U")?.name, "ACR122U");
 
     ctx.close();
+  });
+
+  it("should emit unready and ready transition events", async () => {
+    const mock = createMockNative();
+    const events = [];
+
+    const ctx = startContext({
+      _nativeContext: mock,
+      ready: () => events.push("ready"),
+      unready: (err) => events.push(`unready:${err.code}`),
+    });
+
+    await delay(0);
+    mock.emitUnready("PC/SC service not running", 0x8010001d);
+    await delay(0);
+    mock.emitReady();
+    await delay(0);
+
+    assert.deepStrictEqual(events, ["ready", `unready:${0x8010001d}`, "ready"]);
+    ctx.close();
+  });
+
+  it("getReaders should timeout when no ready or unready event is received", async () => {
+    const native = {
+      isValid: true,
+      startMonitor: () => {},
+      stopMonitor: () => {},
+      close: () => {},
+    };
+
+    const ctx = new Context({ _nativeContext: native });
+
+    await assert.rejects(
+      () => ctx.getReaders({ timeoutMs: 25 }),
+      (err) =>
+        err instanceof Error && err.message.includes("No ready or unready event received yet."),
+    );
+
+    ctx.close();
+  });
+
+  it("getReaders timeout should include last unready reason and code", async () => {
+    const native = {
+      isValid: true,
+      /** @param {(event: any) => void} callback */
+      startMonitor: (callback) => {
+        setImmediate(() => {
+          callback({
+            type: "unready",
+            name: "PC/SC service not running",
+            state: 0,
+            code: 0x8010001d,
+            atr: null,
+          });
+        });
+      },
+      stopMonitor: () => {},
+      close: () => {},
+    };
+
+    const ctx = new Context({ _nativeContext: native });
+
+    await assert.rejects(
+      () => ctx.getReaders({ timeoutMs: 25 }),
+      (err) =>
+        err instanceof Error &&
+        "code" in err &&
+        err.code === 0x8010001d &&
+        err.message.includes("Last unready reason: PC/SC service not running."),
+    );
+
+    ctx.close();
+  });
+
+  it("getReaders should reject immediately when context closes before ready", async () => {
+    const native = {
+      isValid: true,
+      startMonitor: () => {},
+      stopMonitor: () => {},
+      close: () => {},
+    };
+
+    const ctx = new Context({ _nativeContext: native });
+    const pending = ctx.getReaders({ timeoutMs: 100 });
+    setTimeout(() => ctx.close(), 5);
+
+    await assert.rejects(
+      () => pending,
+      (err) => err instanceof Error && err.message.includes("Context closed before ready"),
+    );
   });
 
   it("should disconnect cards on close", async () => {

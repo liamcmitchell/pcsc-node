@@ -5,6 +5,10 @@ export interface ContextOptions {
   autoConnect?: boolean;
 }
 
+export interface GetReadersOptions {
+  timeoutMs?: number;
+}
+
 export interface ContextEvents {
   reader: [reader: Reader];
   attach: [reader: Reader];
@@ -14,6 +18,7 @@ export interface ContextEvents {
   remove: [reader: Reader];
   error: [err: Error & { code?: number }];
   ready: [];
+  unready: [err: Error & { code?: number }];
 }
 
 export interface ReaderEvents {
@@ -30,7 +35,7 @@ export declare class Context extends EventEmitter<ContextEvents> {
   readonly isValid: boolean;
   readonly readers: ReadonlyMap<string, Reader>;
   start(): this;
-  getReaders(): Promise<ReadonlyMap<string, Reader>>;
+  getReaders(options?: GetReadersOptions): Promise<ReadonlyMap<string, Reader>>;
   close(): void;
 }
 

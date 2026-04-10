@@ -48,7 +48,8 @@ private:
 
   // Internal monitoring methods
   void MonitorLoop();
-  LONG MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted);
+  LONG MonitorReadersLoop(SCARDCONTEXT ctx, bool &readyEmitted,
+                          bool &unreadyEmitted);
   void EmitEvent(const std::string &eventType, const std::string &readerName,
                  DWORD state, const std::vector<uint8_t> &atr, DWORD code = 0);
   void StopMonitorInternal();
