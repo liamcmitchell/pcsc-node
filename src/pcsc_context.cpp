@@ -21,7 +21,6 @@ Napi::Object PCSCContext::Init(Napi::Env env, Napi::Object exports) {
       env, "PCSCContext",
       {
           InstanceMethod("startMonitor", &PCSCContext::StartMonitor),
-          InstanceMethod("stopMonitor", &PCSCContext::StopMonitor),
           InstanceMethod("close", &PCSCContext::Close),
           InstanceAccessor("isValid", &PCSCContext::GetIsValid, nullptr),
       });
@@ -37,7 +36,7 @@ PCSCContext::PCSCContext(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<PCSCContext>(info), closed_(false), cancelContext_(0),
       monitoring_(false) {}
 
-PCSCContext::~PCSCContext() { StopMonitorInternal(); }
+PCSCContext::~PCSCContext() { StopMonitorInternal(false); }
 
 Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -61,11 +60,10 @@ Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo &info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  tsfn_ =
-      Napi::ThreadSafeFunction::New(env, callback, "PCSCMonitor",
-                                    0, // Unlimited queue size
-                                    1, // 1 initial thread
-                                    [this](Napi::Env) { monitoring_ = false; });
+  tsfn_ = Napi::ThreadSafeFunction::New(env, callback, "PCSCMonitor",
+                                        0, // Unlimited queue size
+                                        1, // 1 initial thread
+                                        [](Napi::Env) {});
 
   monitoring_ = true;
   monitorThread_ = std::thread(&PCSCContext::MonitorLoop, this);
@@ -73,12 +71,7 @@ Napi::Value PCSCContext::StartMonitor(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
-Napi::Value PCSCContext::StopMonitor(const Napi::CallbackInfo &info) {
-  StopMonitorInternal();
-  return info.Env().Undefined();
-}
-
-void PCSCContext::StopMonitorInternal() {
+void PCSCContext::StopMonitorInternal(bool teardownTsfn) {
   if (!monitoring_) {
     return;
   }
@@ -98,12 +91,20 @@ void PCSCContext::StopMonitorInternal() {
     monitorThread_.join();
   }
 
-  tsfn_.Release();
+  // Abort TSFN only on explicit close; skip during destructor-time teardown.
+  if (teardownTsfn) {
+    try {
+      tsfn_.Abort();
+    } catch (...) {
+      // Abort may throw during late env teardown; ignore close-path exceptions.
+    }
+  }
+
   readerStates_.clear();
 }
 
 Napi::Value PCSCContext::Close(const Napi::CallbackInfo &info) {
-  StopMonitorInternal();
+  StopMonitorInternal(true);
   closed_ = true;
   return info.Env().Undefined();
 }

@@ -42,7 +42,6 @@ private:
 
   // JavaScript-exposed methods
   Napi::Value StartMonitor(const Napi::CallbackInfo &info);
-  Napi::Value StopMonitor(const Napi::CallbackInfo &info);
   Napi::Value Close(const Napi::CallbackInfo &info);
   Napi::Value GetIsValid(const Napi::CallbackInfo &info);
 
@@ -52,5 +51,5 @@ private:
                           bool &unreadyEmitted);
   void EmitEvent(const std::string &eventType, const std::string &readerName,
                  DWORD state, const std::vector<uint8_t> &atr, DWORD code = 0);
-  void StopMonitorInternal();
+  void StopMonitorInternal(bool teardownTsfn);
 };

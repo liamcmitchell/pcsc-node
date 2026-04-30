@@ -161,10 +161,6 @@ function createMockNative() {
       callback({ type: "ready", name: "", state: 0, atr: null });
     },
 
-    stopMonitor() {
-      monitorCallback = null;
-    },
-
     close() {
       closed = true;
     },
@@ -182,7 +178,13 @@ function createMockNative() {
       const state = hasCard ? 0x02 | SCARD_STATE_PRESENT : 0x02;
       const nativeReader = createMockNativeReader(name, opts);
       readers.set(name, { nativeReader, state });
-      emit({ type: "attached", name, state, atr: nativeReader.atr, nativeReader });
+      emit({
+        type: "attached",
+        name,
+        state,
+        atr: nativeReader.atr,
+        nativeReader,
+      });
       return nativeReader;
     },
 

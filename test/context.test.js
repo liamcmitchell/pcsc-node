@@ -92,7 +92,10 @@ describe("Context Integration", () => {
     mock.attachReader("ACR122U", {
       atr: Buffer.from([0x3b, 0x8f, 0x80, 0x01]),
       onTransmit: responseMap([
-        { command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x04, 0xa2, 0x90, 0x00] },
+        {
+          command: [0xff, 0xca, 0x00, 0x00, 0x00],
+          response: [0x04, 0xa2, 0x90, 0x00],
+        },
       ]),
     });
 
@@ -345,7 +348,6 @@ describe("Context Integration", () => {
     const native = {
       isValid: true,
       startMonitor: () => {},
-      stopMonitor: () => {},
       close: () => {},
     };
 
@@ -375,7 +377,6 @@ describe("Context Integration", () => {
           });
         });
       },
-      stopMonitor: () => {},
       close: () => {},
     };
 
@@ -397,7 +398,6 @@ describe("Context Integration", () => {
     const native = {
       isValid: true,
       startMonitor: () => {},
-      stopMonitor: () => {},
       close: () => {},
     };
 
@@ -507,7 +507,10 @@ describe("Context Integration", () => {
 
   it("should expose reader.protocol after connect", async () => {
     const mock = createMockNative();
-    mock.attachReader("ACR122U", { atr: Buffer.from([0x3b]), protocol: SCARD_PROTOCOL_T1 });
+    mock.attachReader("ACR122U", {
+      atr: Buffer.from([0x3b]),
+      protocol: SCARD_PROTOCOL_T1,
+    });
     const cardEvents = [];
     const ctx = startContext({
       _nativeContext: mock,
@@ -689,15 +692,6 @@ describe("Context Integration", () => {
     assert.strictEqual(ctx.isValid, false);
   });
 
-  it("should not throw from close() if stopMonitor() throws", async () => {
-    const mock = createMockNative();
-    mock.stopMonitor = () => {
-      throw new Error("Stop failed");
-    };
-    const ctx = startContext({ _nativeContext: mock });
-    assert.doesNotThrow(() => ctx.close());
-  });
-
   it("should swallow disconnect errors when reader is detached while connected", async () => {
     const mock = createMockNative();
     mock.attachReader("ACR122U", {
@@ -756,7 +750,10 @@ describe("Context Integration", () => {
     const nativeReader = mock.attachReader("ACR122U", {
       atr: Buffer.from([0x3b]),
       onTransmit: responseMap([
-        { command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x01, 0x90, 0x00] },
+        {
+          command: [0xff, 0xca, 0x00, 0x00, 0x00],
+          response: [0x01, 0x90, 0x00],
+        },
       ]),
     });
     const cardEvents = [];
@@ -972,7 +969,12 @@ describe("Auto GET RESPONSE", () => {
 
   it("should pass through normal responses unchanged", async () => {
     const { response, nativeReader } = await transmitViaReader(
-      [{ command: [0xff, 0xca, 0x00, 0x00, 0x00], response: [0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00] }],
+      [
+        {
+          command: [0xff, 0xca, 0x00, 0x00, 0x00],
+          response: [0x04, 0xa2, 0x3b, 0x7a, 0x90, 0x00],
+        },
+      ],
       [0xff, 0xca, 0x00, 0x00, 0x00],
       undefined,
       true,
@@ -1020,7 +1022,10 @@ describe("Auto GET RESPONSE", () => {
     const { response, nativeReader } = await transmitViaReader(
       [
         { command: [0x00, 0xca, 0x9f, 0x17], response: [0x6c, 0x01] },
-        { command: [0x00, 0xca, 0x9f, 0x17, 0x01], response: [0x03, 0x90, 0x00] },
+        {
+          command: [0x00, 0xca, 0x9f, 0x17, 0x01],
+          response: [0x03, 0x90, 0x00],
+        },
       ],
       [0x00, 0xca, 0x9f, 0x17],
       undefined,
